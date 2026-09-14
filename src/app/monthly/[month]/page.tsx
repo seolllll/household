@@ -155,7 +155,7 @@ export default function MonthlyPage({ params }: { params: Promise<{ month: strin
 
       <SummaryCards income={income} expense={expense} />
 
-      <Card size="sm">
+      <Card size="sm" className="border-primary/30 bg-white">
         <CardContent>
           <p className="mb-2 text-xs text-muted-foreground">전체 예산 대비 지출</p>
           <BudgetProgressBar spent={expense} budget={budgetAmount} />
@@ -164,7 +164,7 @@ export default function MonthlyPage({ params }: { params: Promise<{ month: strin
 
       <section className="flex flex-col gap-2">
         <h2 className="text-sm font-medium text-muted-foreground">카테고리별 지출</h2>
-        <Card size="sm">
+        <Card size="sm" className="border-primary/30 bg-white">
           <CardContent>
             {categorySummaries.length === 0 ? (
               <p className="text-sm text-muted-foreground">지출 내역이 없습니다</p>
@@ -216,7 +216,7 @@ export default function MonthlyPage({ params }: { params: Promise<{ month: strin
         </Card>
       </section>
 
-      <Card size="sm">
+      <Card size="sm" className="border-primary/30 bg-white">
         <CardContent className="flex items-center justify-between">
           <span className="text-xs text-muted-foreground">다음달로 이월되는 금액</span>
           <span

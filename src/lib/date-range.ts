@@ -24,29 +24,10 @@ export function enumerateDateKeys(from: string, to: string): string[] {
   return keys;
 }
 
-export function getTodayRange(now = new Date()): DateRange {
-  const key = toDateKey(now);
-  return { from: key, to: key };
-}
-
-export function getThisWeekRange(now = new Date()): DateRange {
-  const day = now.getDay();
-  const mondayOffset = day === 0 ? -6 : 1 - day;
-  const monday = new Date(now);
-  monday.setDate(now.getDate() + mondayOffset);
-  const sunday = new Date(monday);
-  sunday.setDate(monday.getDate() + 6);
-  return { from: toDateKey(monday), to: toDateKey(sunday) };
-}
-
 export function getMonthRange(year: number, month: number): DateRange {
   const first = new Date(year, month, 1);
   const last = new Date(year, month + 1, 0);
   return { from: toDateKey(first), to: toDateKey(last) };
-}
-
-export function getThisMonthRange(now = new Date()): DateRange {
-  return getMonthRange(now.getFullYear(), now.getMonth());
 }
 
 export function encodeMonthParam(year: number, month: number): string {

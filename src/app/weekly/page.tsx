@@ -61,7 +61,7 @@ export default function WeeklyPage() {
 
   return (
     <main className="mx-auto flex max-w-xl flex-col gap-4 p-4 sm:p-6">
-      <Card size="sm">
+      <Card size="sm" className="border-primary/30 bg-white">
         <CardContent className="flex items-center justify-between">
           <span className="text-xs text-muted-foreground">{month + 1}월 생활비</span>
           {editingBudget ? (
@@ -121,7 +121,7 @@ export default function WeeklyPage() {
           }
 
           return (
-            <Card key={week.weekNumber} size="sm">
+            <Card key={week.weekNumber} size="sm" className="border-primary/30 bg-white">
               <CardContent className="flex flex-col gap-3">
                 <button
                   type="button"

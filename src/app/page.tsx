@@ -2,45 +2,21 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { PlusIcon } from "lucide-react";
+import { cn } from "cn";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { SummaryCards } from "@/components/summary-cards";
-import { CategoryExpenseDonut, type CategorySlice } from "@/components/category-expense-donut";
 import { QuickAddModal } from "@/components/quick-add-modal";
-import { fetchTransactions, type TransactionWithCategory } from "@/lib/queries";
-import { getThisMonthRange, getThisWeekRange, getTodayRange } from "@/lib/date-range";
+import { fetchAllTransactions, type TransactionWithCategory } from "@/lib/queries";
+import { formatCurrency, formatDateWithWeekday } from "@/lib/format";
 
-type Period = "today" | "week" | "month";
-
-const PERIOD_RANGE: Record<Period, () => { from: string; to: string }> = {
-  today: getTodayRange,
-  week: getThisWeekRange,
-  month: getThisMonthRange,
-};
-
-const PERIOD_LABEL: Record<Period, string> = {
-  today: "오늘",
-  week: "이번주",
-  month: "이번달",
-};
-
-export default function HomePage() {
-  const [period, setPeriod] = useState<Period>("today");
+export default function DailySettlementPage() {
   const [transactions, setTransactions] = useState<TransactionWithCategory[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
 
-  const [renderedPeriod, setRenderedPeriod] = useState(period);
-  if (period !== renderedPeriod) {
-    setRenderedPeriod(period);
-    setLoading(true);
-  }
-
   useEffect(() => {
     let cancelled = false;
-    const range = PERIOD_RANGE[period]();
-    fetchTransactions(range).then((data) => {
+    fetchAllTransactions().then((data) => {
       if (cancelled) return;
       setTransactions(data);
       setLoading(false);
@@ -48,63 +24,68 @@ export default function HomePage() {
     return () => {
       cancelled = true;
     };
-  }, [period, refreshKey]);
+  }, [refreshKey]);
 
-  const income = useMemo(
-    () => transactions.filter((t) => t.type === "income").reduce((sum, t) => sum + t.amount, 0),
-    [transactions]
-  );
-  const expense = useMemo(
-    () => transactions.filter((t) => t.type === "expense").reduce((sum, t) => sum + t.amount, 0),
-    [transactions]
-  );
-
-  const categorySlices = useMemo<CategorySlice[]>(() => {
-    const map = new Map<string, CategorySlice>();
+  const groups = useMemo(() => {
+    const map = new Map<string, TransactionWithCategory[]>();
     for (const t of transactions) {
-      if (t.type !== "expense" || !t.category) continue;
-      const existing = map.get(t.category.id);
-      if (existing) {
-        existing.amount += t.amount;
-      } else {
-        map.set(t.category.id, {
-          id: t.category.id,
-          name: t.category.name,
-          color: t.category.color ?? "#888780",
-          amount: t.amount,
-        });
-      }
+      const list = map.get(t.date);
+      if (list) list.push(t);
+      else map.set(t.date, [t]);
     }
-    return Array.from(map.values()).sort((a, b) => b.amount - a.amount);
+    return Array.from(map.entries()).sort((a, b) => b[0].localeCompare(a[0]));
   }, [transactions]);
 
   return (
-    <main className="mx-auto flex max-w-xl flex-col gap-6 p-4 pb-24 sm:p-6">
-      <Tabs value={period} onValueChange={(v) => setPeriod(v as Period)}>
-        <TabsList>
-          {(Object.keys(PERIOD_LABEL) as Period[]).map((p) => (
-            <TabsTrigger key={p} value={p}>
-              {PERIOD_LABEL[p]}
-            </TabsTrigger>
+    <main className="mx-auto flex max-w-xl flex-col gap-4 p-4 sm:p-6">
+
+      {loading ? (
+        <p className="text-sm text-muted-foreground">불러오는 중...</p>
+      ) : groups.length === 0 ? (
+        <p className="text-sm text-muted-foreground">거래 내역이 없습니다</p>
+      ) : (
+        <div className="flex flex-col gap-4">
+          {groups.map(([date, items]) => (
+            <section key={date} className="flex flex-col gap-2">
+              <h2 className="text-sm font-medium text-muted-foreground">
+                {formatDateWithWeekday(date)}
+              </h2>
+              <ul className="flex flex-col gap-2">
+                {items.map((t) => (
+                  <li
+                    key={t.id}
+                    className="flex items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm ring-1 ring-border"
+                  >
+                    <div className="flex flex-col">
+                      <span>
+                        {t.memo || t.category?.name || (t.type === "income" ? "수입" : "지출")}
+                      </span>
+                      {t.memo && (
+                        <span className="text-xs text-muted-foreground">
+                          {t.category?.name ?? "미분류"}
+                        </span>
+                      )}
+                    </div>
+                    <span
+                      className={cn(
+                        "shrink-0 font-medium tabular-nums",
+                        t.type === "income" ? "text-income" : "text-expense"
+                      )}
+                    >
+                      {formatCurrency(t.amount)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </section>
           ))}
-        </TabsList>
-      </Tabs>
-
-      <SummaryCards income={income} expense={expense} />
-
-      <section className="flex flex-col gap-3">
-        <h2 className="text-sm font-medium text-muted-foreground">카테고리별 지출</h2>
-        {loading ? (
-          <p className="text-sm text-muted-foreground">불러오는 중...</p>
-        ) : (
-          <CategoryExpenseDonut data={categorySlices} />
-        )}
-      </section>
+        </div>
+      )}
 
       <Button
         type="button"
         size="icon-lg"
-        className="fixed right-6 bottom-6 rounded-full"
+        className="fixed right-6 bottom-20 rounded-full"
         onClick={() => setModalOpen(true)}
       >
         <PlusIcon />

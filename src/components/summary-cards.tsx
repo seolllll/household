@@ -12,7 +12,7 @@ export function SummaryCards({ income, expense }: SummaryCardsProps) {
 
   return (
     <div className="grid grid-cols-3 gap-3">
-      <Card size="sm">
+      <Card size="sm" className="min-h-[72px] border-primary/30 bg-white">
         <CardHeader>
           <CardTitle className="text-xs whitespace-nowrap text-muted-foreground">수입</CardTitle>
         </CardHeader>
@@ -22,7 +22,7 @@ export function SummaryCards({ income, expense }: SummaryCardsProps) {
           </p>
         </CardContent>
       </Card>
-      <Card size="sm">
+      <Card size="sm" className="min-h-[72px] border-primary/30 bg-white">
         <CardHeader>
           <CardTitle className="text-xs whitespace-nowrap text-muted-foreground">지출</CardTitle>
         </CardHeader>
@@ -32,7 +32,7 @@ export function SummaryCards({ income, expense }: SummaryCardsProps) {
           </p>
         </CardContent>
       </Card>
-      <Card size="sm">
+      <Card size="sm" className="min-h-[72px] border-primary/30 bg-white">
         <CardHeader>
           <CardTitle className="text-xs whitespace-nowrap text-muted-foreground">잔액</CardTitle>
         </CardHeader>

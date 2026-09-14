@@ -14,11 +14,11 @@ export function BudgetProgressBar({ spent, budget }: BudgetProgressBarProps) {
 
   return (
     <div className="flex flex-col gap-1.5">
-      <div className="flex items-center justify-between text-xs text-muted-foreground">
-        <span>
+      <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+        <span className="truncate">
           {formatCurrency(spent)} / {formatCurrency(budget)}
         </span>
-        <span className="tabular-nums">{percent}%</span>
+        <span className="shrink-0 tabular-nums">{percent}%</span>
       </div>
       <ProgressPrimitive.Root value={Math.min(percent, 100)}>
         <ProgressTrack>

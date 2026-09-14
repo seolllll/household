@@ -1,8 +1,9 @@
 import { supabase } from "@/lib/supabase/client";
-import type { Category, MonthlyBudget, Transaction, TransactionType } from "@/types/database";
+import type { Budget, Category, MonthlyBudget, Transaction, TransactionType } from "@/types/database";
 import type { DateRange } from "@/lib/date-range";
 
 export type TransactionWithCategory = Transaction & { category: Category | null };
+export type BudgetWithCategory = Budget & { category: Category | null };
 
 export async function fetchCategories(type: TransactionType): Promise<Category[]> {
   const { data, error } = await supabase
@@ -45,6 +46,16 @@ export async function fetchTransactions(range: DateRange): Promise<TransactionWi
   return (data ?? []) as unknown as TransactionWithCategory[];
 }
 
+export async function fetchAllTransactions(): Promise<TransactionWithCategory[]> {
+  const { data, error } = await supabase
+    .from("transactions")
+    .select("*, category:categories(*)")
+    .order("date", { ascending: false })
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return (data ?? []) as unknown as TransactionWithCategory[];
+}
+
 export interface NewTransactionInput {
   type: TransactionType;
   amount: number;
@@ -73,4 +84,13 @@ export async function upsertMonthlyBudget(month: string, amount: number): Promis
     .from("monthly_budgets")
     .upsert({ month, amount }, { onConflict: "month" });
   if (error) throw error;
+}
+
+export async function fetchBudgets(month: string): Promise<BudgetWithCategory[]> {
+  const { data, error } = await supabase
+    .from("budgets")
+    .select("*, category:categories(*)")
+    .eq("month", month);
+  if (error) throw error;
+  return (data ?? []) as unknown as BudgetWithCategory[];
 }
