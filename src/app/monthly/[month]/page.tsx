@@ -157,7 +157,7 @@ export default function MonthlyPage({ params }: { params: Promise<{ month: strin
 
       <Card size="sm" className="border-primary/30 bg-white">
         <CardContent>
-          <p className="mb-2 text-xs text-muted-foreground">전체 예산 대비 지출</p>
+          <p className="mb-2 text-xs text-muted-foreground">이번 달 예산 진행률</p>
           <BudgetProgressBar spent={expense} budget={budgetAmount} />
         </CardContent>
       </Card>

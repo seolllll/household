@@ -2,7 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
 import { cn } from "cn";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { CategoryBarBreakdown, type CategoryBarItem } from "@/components/category-bar-breakdown";
@@ -18,8 +20,8 @@ import {
 
 export default function WeeklyPage() {
   const today = useMemo(() => new Date(), []);
-  const year = today.getFullYear();
-  const month = today.getMonth();
+  const [year, setYear] = useState(today.getFullYear());
+  const [month, setMonth] = useState(today.getMonth());
   const todayKey = useMemo(() => toDateKey(today), [today]);
   const monthKey = `${year}-${String(month + 1).padStart(2, "0")}-01`;
 
@@ -28,6 +30,13 @@ export default function WeeklyPage() {
   const [editingBudget, setEditingBudget] = useState(false);
   const [budgetInput, setBudgetInput] = useState("");
   const [expandedWeek, setExpandedWeek] = useState<number | null>(null);
+
+  function goToMonth(delta: number) {
+    const next = new Date(year, month + delta, 1);
+    setYear(next.getFullYear());
+    setMonth(next.getMonth());
+    setExpandedWeek(null);
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -61,6 +70,18 @@ export default function WeeklyPage() {
 
   return (
     <main className="mx-auto flex max-w-xl flex-col gap-4 p-4 sm:p-6">
+      <div className="flex items-center justify-between">
+        <Button type="button" variant="ghost" size="icon" onClick={() => goToMonth(-1)}>
+          <ChevronLeftIcon />
+        </Button>
+        <h1 className="text-base font-medium">
+          {year}년 {month + 1}월
+        </h1>
+        <Button type="button" variant="ghost" size="icon" onClick={() => goToMonth(1)}>
+          <ChevronRightIcon />
+        </Button>
+      </div>
+
       <Card size="sm" className="border-primary/30 bg-white">
         <CardContent className="flex items-center justify-between">
           <span className="text-xs text-muted-foreground">{month + 1}월 생활비</span>

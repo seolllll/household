@@ -2,7 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BarChart3Icon, CalendarIcon, CalendarRangeIcon, HomeIcon, ReceiptIcon } from "lucide-react";
+import {
+  BarChart3Icon,
+  CalendarIcon,
+  CalendarRangeIcon,
+  NotebookPenIcon,
+  ReceiptIcon,
+} from "lucide-react";
 import { cn } from "cn";
 import { encodeMonthParam } from "@/lib/date-range";
 
@@ -18,7 +24,7 @@ const NAV_ITEMS = [
     icon: CalendarIcon,
     match: (path: string) => path.startsWith("/calendar"),
   },
-  { href: "/", label: "일일정산", icon: HomeIcon, match: (path: string) => path === "/" },
+  { href: "/", label: "일일정산", icon: NotebookPenIcon, match: (path: string) => path === "/" },
   {
     href: "/weekly",
     label: "주간정산",

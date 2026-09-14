@@ -69,6 +69,16 @@ export async function createTransaction(input: NewTransactionInput): Promise<voi
   if (error) throw error;
 }
 
+export async function updateTransaction(id: string, input: NewTransactionInput): Promise<void> {
+  const { error } = await supabase.from("transactions").update(input).eq("id", id);
+  if (error) throw error;
+}
+
+export async function deleteTransaction(id: string): Promise<void> {
+  const { error } = await supabase.from("transactions").delete().eq("id", id);
+  if (error) throw error;
+}
+
 export async function fetchMonthlyBudget(month: string): Promise<MonthlyBudget | null> {
   const { data, error } = await supabase
     .from("monthly_budgets")

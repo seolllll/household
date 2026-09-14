@@ -30,6 +30,31 @@ export function getMonthRange(year: number, month: number): DateRange {
   return { from: toDateKey(first), to: toDateKey(last) };
 }
 
+/** Last `count` Sun–Sat weeks, oldest first, ending with the week containing `endDate`. */
+export function getRecentWeekRanges(count: number, endDate: Date = new Date()): DateRange[] {
+  const currentWeekEnd = new Date(endDate);
+  currentWeekEnd.setDate(currentWeekEnd.getDate() + (6 - currentWeekEnd.getDay()));
+  const ranges: DateRange[] = [];
+  for (let i = count - 1; i >= 0; i--) {
+    const weekEnd = new Date(currentWeekEnd);
+    weekEnd.setDate(currentWeekEnd.getDate() - i * 7);
+    const weekStart = new Date(weekEnd);
+    weekStart.setDate(weekEnd.getDate() - 6);
+    ranges.push({ from: toDateKey(weekStart), to: toDateKey(weekEnd) });
+  }
+  return ranges;
+}
+
+/** Last `count` calendar months, oldest first, ending with the month containing `endDate`. */
+export function getRecentMonthRanges(count: number, endDate: Date = new Date()): DateRange[] {
+  const ranges: DateRange[] = [];
+  for (let i = count - 1; i >= 0; i--) {
+    const d = new Date(endDate.getFullYear(), endDate.getMonth() - i, 1);
+    ranges.push(getMonthRange(d.getFullYear(), d.getMonth()));
+  }
+  return ranges;
+}
+
 export function encodeMonthParam(year: number, month: number): string {
   return `${year}-${String(month + 1).padStart(2, "0")}`;
 }

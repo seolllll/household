@@ -1,13 +1,19 @@
 "use client";
 
 import { use, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { Bar, BarChart, Cell, ResponsiveContainer, Tooltip, XAxis } from "recharts";
+import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
 import { cn } from "cn";
 import { SummaryCards } from "@/components/summary-cards";
 import { formatCurrency, formatShortDate } from "@/lib/format";
-import { enumerateDateKeys, parseDateKey } from "@/lib/date-range";
-import { decodeWeekParam, getMonthWeeks } from "@/lib/week";
-import { fetchTransactions, type TransactionWithCategory } from "@/lib/queries";
+import { enumerateDateKeys, getMonthRange, parseDateKey, toDateKey } from "@/lib/date-range";
+import { decodeWeekParam, encodeWeekParam, getMonthWeeks } from "@/lib/week";
+import {
+  fetchMonthlyBudget,
+  fetchTransactions,
+  type TransactionWithCategory,
+} from "@/lib/queries";
 
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
 
@@ -43,26 +49,49 @@ export default function WeeklyDetailPage({
 }) {
   const { week } = use(params);
 
+  const parsedWeek = useMemo(() => decodeWeekParam(week), [week]);
   const weekInfo = useMemo(() => {
-    const parsed = decodeWeekParam(week);
-    if (!parsed) return null;
-    const weeks = getMonthWeeks(parsed.year, parsed.month);
-    return weeks.find((w) => w.weekNumber === parsed.weekNumber) ?? null;
-  }, [week]);
+    if (!parsedWeek) return null;
+    const weeks = getMonthWeeks(parsedWeek.year, parsedWeek.month);
+    return weeks.find((w) => w.weekNumber === parsedWeek.weekNumber) ?? null;
+  }, [parsedWeek]);
 
   const [transactions, setTransactions] = useState<TransactionWithCategory[]>([]);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [budgetAmount, setBudgetAmount] = useState(0);
+  const [cumulativeExpense, setCumulativeExpense] = useState(0);
+
+  // Reset the selected day whenever the viewed week changes (prev/next navigation).
+  const [prevWeekKey, setPrevWeekKey] = useState<string | null>(null);
+  const weekKey = weekInfo ? `${weekInfo.from}_${weekInfo.to}` : null;
+  if (weekKey !== prevWeekKey) {
+    setPrevWeekKey(weekKey);
+    setSelectedDate(null);
+  }
 
   useEffect(() => {
-    if (!weekInfo) return;
+    if (!weekInfo || !parsedWeek) return;
     let cancelled = false;
-    fetchTransactions({ from: weekInfo.from, to: weekInfo.to }).then((data) => {
-      if (!cancelled) setTransactions(data);
+    const monthRange = getMonthRange(parsedWeek.year, parsedWeek.month);
+    const monthKey = `${parsedWeek.year}-${String(parsedWeek.month + 1).padStart(2, "0")}-01`;
+    Promise.all([
+      fetchTransactions({ from: weekInfo.from, to: weekInfo.to }),
+      fetchTransactions({ from: monthRange.from, to: weekInfo.to }),
+      fetchMonthlyBudget(monthKey),
+    ]).then(([weekTx, cumulativeTx, budget]) => {
+      if (cancelled) return;
+      setTransactions(weekTx);
+      setCumulativeExpense(
+        cumulativeTx
+          .filter((t) => t.type === "expense")
+          .reduce((sum, t) => sum + t.amount, 0)
+      );
+      setBudgetAmount(budget?.amount ?? 0);
     });
     return () => {
       cancelled = true;
     };
-  }, [weekInfo]);
+  }, [weekInfo, parsedWeek]);
 
   const chartData = useMemo<ChartPoint[]>(() => {
     if (!weekInfo) return [];
@@ -80,6 +109,7 @@ export default function WeeklyDetailPage({
   const expense = transactions
     .filter((t) => t.type === "expense")
     .reduce((sum, t) => sum + t.amount, 0);
+  const remaining = budgetAmount - cumulativeExpense;
 
   const selectedTransactions = transactions.filter(
     (t) => t.type === "expense" && t.date === selectedDate
@@ -93,14 +123,53 @@ export default function WeeklyDetailPage({
     );
   }
 
+  const prevLink = (() => {
+    const d = parseDateKey(weekInfo.from);
+    d.setDate(d.getDate() - 1);
+    const year = d.getFullYear();
+    const month = d.getMonth();
+    const key = toDateKey(d);
+    const weeks = getMonthWeeks(year, month);
+    const target = weeks.find((w) => w.to === key) ?? weeks[weeks.length - 1];
+    return encodeWeekParam(year, month, target.weekNumber);
+  })();
+  const nextLink = (() => {
+    const d = parseDateKey(weekInfo.to);
+    d.setDate(d.getDate() + 1);
+    const year = d.getFullYear();
+    const month = d.getMonth();
+    const key = toDateKey(d);
+    const weeks = getMonthWeeks(year, month);
+    const target = weeks.find((w) => w.from === key) ?? weeks[0];
+    return encodeWeekParam(year, month, target.weekNumber);
+  })();
+
   return (
     <main className="mx-auto flex max-w-xl flex-col gap-4 p-4 sm:p-6">
-      <h1 className="text-base font-medium">
-        {weekInfo.weekNumber}주차 · {formatShortDate(weekInfo.from)} ~{" "}
-        {formatShortDate(weekInfo.to)}
-      </h1>
+      <div className="flex items-center justify-between">
+        <Link
+          href={`/weekly/${prevLink}`}
+          className="flex size-8 items-center justify-center rounded-lg hover:bg-muted"
+        >
+          <ChevronLeftIcon className="size-4" />
+        </Link>
+        <h1 className="text-base font-medium">
+          {weekInfo.weekNumber}주차 · {formatShortDate(weekInfo.from)} ~{" "}
+          {formatShortDate(weekInfo.to)}
+        </h1>
+        <Link
+          href={`/weekly/${nextLink}`}
+          className="flex size-8 items-center justify-center rounded-lg hover:bg-muted"
+        >
+          <ChevronRightIcon className="size-4" />
+        </Link>
+      </div>
 
-      <SummaryCards income={income} expense={expense} />
+      <SummaryCards
+        income={income}
+        expense={expense}
+        firstCard={{ label: "남은 생활비", value: remaining }}
+      />
 
       <section className="flex flex-col gap-3">
         <h2 className="text-sm font-medium text-muted-foreground">요일별 지출</h2>

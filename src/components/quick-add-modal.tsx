@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import dynamic from "next/dynamic";
 import {
   Dialog,
   DialogContent,
@@ -12,10 +13,19 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "cn";
+
+// tui-date-picker touches `window` at module load time, which breaks Next's
+// server-side render of this client component — load it in the browser only.
+const DatePickerInput = dynamic(
+  () => import("@/components/ui/date-picker-input").then((m) => m.DatePickerInput),
+  { ssr: false }
+);
 import {
   createTransaction,
   fetchCategories,
   fetchRecentCategoryIds,
+  updateTransaction,
+  type TransactionWithCategory,
 } from "@/lib/queries";
 import { toDateKey } from "@/lib/date-range";
 import type { Category, TransactionType } from "@/types/database";
@@ -24,6 +34,8 @@ interface QuickAddModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSaved: () => void;
+  /** Pass an existing transaction to edit it instead of creating a new one. */
+  transaction?: TransactionWithCategory | null;
 }
 
 function orderByRecent(categories: Category[], recentIds: string[]): Category[] {
@@ -34,13 +46,18 @@ function orderByRecent(categories: Category[], recentIds: string[]): Category[] 
   return [...recent, ...rest];
 }
 
-export function QuickAddModal({ open, onOpenChange, onSaved }: QuickAddModalProps) {
-  const [type, setType] = useState<TransactionType>("expense");
+export function QuickAddModal({
+  open,
+  onOpenChange,
+  onSaved,
+  transaction = null,
+}: QuickAddModalProps) {
+  const [type, setType] = useState<TransactionType>(transaction?.type ?? "expense");
   const [categories, setCategories] = useState<Category[]>([]);
-  const [categoryId, setCategoryId] = useState<string | null>(null);
-  const [amount, setAmount] = useState("");
-  const [date, setDate] = useState(() => toDateKey(new Date()));
-  const [memo, setMemo] = useState("");
+  const [categoryId, setCategoryId] = useState<string | null>(transaction?.category_id ?? null);
+  const [amount, setAmount] = useState(transaction ? String(transaction.amount) : "");
+  const [date, setDate] = useState(() => transaction?.date ?? toDateKey(new Date()));
+  const [memo, setMemo] = useState(transaction?.memo ?? "");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -77,13 +94,18 @@ export function QuickAddModal({ open, onOpenChange, onSaved }: QuickAddModalProp
     if (!isValid || !categoryId) return;
     setSaving(true);
     try {
-      await createTransaction({
+      const input = {
         type,
         amount: amountValue,
         category_id: categoryId,
         date,
         memo: memo.trim() || null,
-      });
+      };
+      if (transaction) {
+        await updateTransaction(transaction.id, input);
+      } else {
+        await createTransaction(input);
+      }
       resetForm();
       onOpenChange(false);
       onSaved();
@@ -102,7 +124,7 @@ export function QuickAddModal({ open, onOpenChange, onSaved }: QuickAddModalProp
     >
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>빠른입력</DialogTitle>
+          <DialogTitle>{transaction ? "수정" : "추가"}</DialogTitle>
         </DialogHeader>
 
         <div className="flex flex-col gap-4">
@@ -162,12 +184,7 @@ export function QuickAddModal({ open, onOpenChange, onSaved }: QuickAddModalProp
 
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="quick-add-date">날짜</Label>
-            <Input
-              id="quick-add-date"
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-            />
+            <DatePickerInput id="quick-add-date" value={date} onChange={setDate} />
           </div>
 
           <div className="flex flex-col gap-1.5">

@@ -137,3 +137,11 @@
     @apply font-sans;
   }
 }
+
+/* Anchor the tui-date-picker popup above its input instead of below it. */
+.date-picker-popup-above .tui-datepicker {
+  top: auto;
+  bottom: 100%;
+  margin-bottom: 0.25rem;
+  z-index: 50;
+}
