@@ -1,69 +1,121 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import { useEffect, useMemo, useState } from "react";
+import { PlusIcon } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { SummaryCards } from "@/components/summary-cards";
+import { CategoryExpenseDonut, type CategorySlice } from "@/components/category-expense-donut";
+import { QuickAddModal } from "@/components/quick-add-modal";
+import { fetchTransactions, type TransactionWithCategory } from "@/lib/queries";
+import { getThisMonthRange, getThisWeekRange, getTodayRange } from "@/lib/date-range";
+
+type Period = "today" | "week" | "month";
+
+const PERIOD_RANGE: Record<Period, () => { from: string; to: string }> = {
+  today: getTodayRange,
+  week: getThisWeekRange,
+  month: getThisMonthRange,
+};
+
+const PERIOD_LABEL: Record<Period, string> = {
+  today: "오늘",
+  week: "이번주",
+  month: "이번달",
+};
+
+export default function HomePage() {
+  const [period, setPeriod] = useState<Period>("today");
+  const [transactions, setTransactions] = useState<TransactionWithCategory[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const [renderedPeriod, setRenderedPeriod] = useState(period);
+  if (period !== renderedPeriod) {
+    setRenderedPeriod(period);
+    setLoading(true);
+  }
+
+  useEffect(() => {
+    let cancelled = false;
+    const range = PERIOD_RANGE[period]();
+    fetchTransactions(range).then((data) => {
+      if (cancelled) return;
+      setTransactions(data);
+      setLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [period, refreshKey]);
+
+  const income = useMemo(
+    () => transactions.filter((t) => t.type === "income").reduce((sum, t) => sum + t.amount, 0),
+    [transactions]
+  );
+  const expense = useMemo(
+    () => transactions.filter((t) => t.type === "expense").reduce((sum, t) => sum + t.amount, 0),
+    [transactions]
+  );
+
+  const categorySlices = useMemo<CategorySlice[]>(() => {
+    const map = new Map<string, CategorySlice>();
+    for (const t of transactions) {
+      if (t.type !== "expense" || !t.category) continue;
+      const existing = map.get(t.category.id);
+      if (existing) {
+        existing.amount += t.amount;
+      } else {
+        map.set(t.category.id, {
+          id: t.category.id,
+          name: t.category.name,
+          color: t.category.color ?? "#888780",
+          amount: t.amount,
+        });
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => b.amount - a.amount);
+  }, [transactions]);
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+    <main className="mx-auto flex max-w-xl flex-col gap-6 p-4 pb-24 sm:p-6">
+      <Tabs value={period} onValueChange={(v) => setPeriod(v as Period)}>
+        <TabsList>
+          {(Object.keys(PERIOD_LABEL) as Period[]).map((p) => (
+            <TabsTrigger key={p} value={p}>
+              {PERIOD_LABEL[p]}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </Tabs>
+
+      <SummaryCards income={income} expense={expense} />
+
+      <section className="flex flex-col gap-3">
+        <h2 className="text-sm font-medium text-muted-foreground">카테고리별 지출</h2>
+        {loading ? (
+          <p className="text-sm text-muted-foreground">불러오는 중...</p>
+        ) : (
+          <CategoryExpenseDonut data={categorySlices} />
+        )}
+      </section>
+
+      <Button
+        type="button"
+        size="icon-lg"
+        className="fixed right-6 bottom-6 rounded-full"
+        onClick={() => setModalOpen(true)}
+      >
+        <PlusIcon />
+        <span className="sr-only">빠른입력</span>
+      </Button>
+
+      <QuickAddModal
+        open={modalOpen}
+        onOpenChange={setModalOpen}
+        onSaved={() => setRefreshKey((k) => k + 1)}
+      />
+    </main>
   );
 }
