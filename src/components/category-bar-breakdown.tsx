@@ -26,13 +26,13 @@ export function CategoryBarBreakdown({ items }: CategoryBarBreakdownProps) {
         const ratio = (item.amount / total) * 100;
         return (
           <li key={item.id} className="flex flex-col gap-1">
-            <div className="flex items-center justify-between text-xs">
+            <div className="flex items-center justify-between text-xs lg:text-sm">
               <span>{item.name}</span>
               <span className="tabular-nums text-muted-foreground">
                 {formatCurrency(item.amount)}
               </span>
             </div>
-            <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+            <div className="h-2 w-full overflow-hidden rounded-full bg-muted lg:h-2.5">
               <div
                 className="h-full rounded-full"
                 style={{ width: `${ratio}%`, backgroundColor: item.color }}

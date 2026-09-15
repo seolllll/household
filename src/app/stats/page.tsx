@@ -147,7 +147,7 @@ export default function StatsPage() {
     hasPreviousData && previousBucket ? Math.round((diff / previousBucket.expense) * 100) : null;
 
   return (
-    <main className="mx-auto flex max-w-xl flex-col gap-4 p-4 sm:p-6">
+    <main className="mx-auto flex max-w-xl flex-col gap-4 p-4 sm:p-6 lg:max-w-4xl lg:gap-6 lg:p-8">
       {loading ? (
         <div className="flex flex-col gap-4">
           <Skeleton className="h-56 w-full rounded-2xl" />
@@ -161,7 +161,9 @@ export default function StatsPage() {
           <Card size="sm" className="border-primary/30 bg-white">
             <CardContent className="flex flex-col gap-3">
               <div className="flex items-center justify-between">
-                <h2 className="text-sm font-medium text-muted-foreground">기간별 지출 추이</h2>
+                <h2 className="text-sm font-medium text-muted-foreground lg:text-base">
+                  기간별 지출 추이
+                </h2>
                 <div className="flex gap-1">
                   <Button
                     type="button"
@@ -181,7 +183,7 @@ export default function StatsPage() {
                   </Button>
                 </div>
               </div>
-              <div className="h-48 w-full">
+              <div className="h-48 w-full lg:h-64">
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={buckets} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
                     <CartesianGrid vertical={false} stroke="var(--border)" strokeDasharray="4 4" />
@@ -210,14 +212,14 @@ export default function StatsPage() {
           {/* 2. 수입 대비 지출 비율 */}
           <Card size="sm" className="border-primary/30 bg-white">
             <CardContent className="flex flex-col items-center gap-3">
-              <h2 className="self-start text-sm font-medium text-muted-foreground">
+              <h2 className="self-start text-sm font-medium text-muted-foreground lg:text-base">
                 수입 대비 지출 비율
               </h2>
               {incomeRatio === null ? (
-                <p className="py-6 text-sm text-muted-foreground">수입 데이터 없음</p>
+                <p className="py-6 text-sm text-muted-foreground lg:text-base">수입 데이터 없음</p>
               ) : (
                 <>
-                  <div className="relative size-36">
+                  <div className="relative size-36 lg:size-44">
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
                         <Pie
@@ -228,8 +230,8 @@ export default function StatsPage() {
                           dataKey="value"
                           startAngle={90}
                           endAngle={-270}
-                          innerRadius={48}
-                          outerRadius={64}
+                          innerRadius="67%"
+                          outerRadius="89%"
                           stroke="none"
                           isAnimationActive={false}
                         >
@@ -239,12 +241,12 @@ export default function StatsPage() {
                       </PieChart>
                     </ResponsiveContainer>
                     <div className="absolute inset-0 flex items-center justify-center">
-                      <span className="text-xl font-semibold tracking-tight">
+                      <span className="text-xl font-semibold tracking-tight lg:text-2xl">
                         {Math.round(incomeRatio * 100)}%
                       </span>
                     </div>
                   </div>
-                  <p className="text-center text-xs text-muted-foreground">
+                  <p className="text-center text-xs text-muted-foreground lg:text-sm">
                     {currentBucket.fullLabel} 수입 {formatCurrency(currentBucket.income)} 중 지출{" "}
                     {formatCurrency(currentBucket.expense)} ({Math.round(incomeRatio * 100)}%)
                   </p>
@@ -256,22 +258,23 @@ export default function StatsPage() {
           {/* 3. 전월/전주 대비 증감률 */}
           <Card size="sm" className="border-primary/30 bg-white">
             <CardContent className="flex items-center justify-between">
-              <span className="text-xs text-muted-foreground">
+              <span className="text-xs text-muted-foreground lg:text-sm">
                 {period === "weekly" ? "전주" : "전월"} 대비
               </span>
               {!hasPreviousData || changePct === null ? (
-                <span className="text-sm text-muted-foreground">비교 데이터 없음</span>
+                <span className="text-sm text-muted-foreground lg:text-base">비교 데이터 없음</span>
               ) : diff === 0 ? (
-                <span className="text-sm font-medium text-muted-foreground">변화 없음</span>
+                <span className="text-sm font-medium text-muted-foreground lg:text-base">
+                  변화 없음
+                </span>
               ) : (
                 <span
                   className={cn(
-                    "text-sm font-semibold tabular-nums",
+                    "text-sm font-semibold tabular-nums lg:text-base",
                     diff > 0 ? "text-expense" : "text-income"
                   )}
                 >
-                  {diff > 0 ? "▲" : "▼"} {formatCurrency(Math.abs(diff))} ({diff > 0 ? "+" : "-"}
-                  {Math.abs(changePct)}%)
+                  {diff > 0 ? "▲" : "▼"} {formatCurrency(Math.abs(diff))}
                 </span>
               )}
             </CardContent>

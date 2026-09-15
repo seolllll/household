@@ -15,7 +15,7 @@ export function RemainingBudgetBar({ remaining, budget }: RemainingBudgetBarProp
 
   return (
     <div className="flex flex-col gap-1.5">
-      <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+      <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground lg:text-sm">
         <span className="truncate">
           {formatCurrency(remaining)} / {formatCurrency(budget)}
         </span>

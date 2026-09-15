@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ChevronLeftIcon, ChevronRightIcon, PencilIcon, PlusIcon, Trash2Icon } from "lucide-react";
 import { cn } from "cn";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import { QuickAddModal } from "@/components/quick-add-modal";
 import { deleteTransaction, fetchTransactions, type TransactionWithCategory } from "@/lib/queries";
 import { formatCurrency, formatDateWithWeekday } from "@/lib/format";
@@ -66,12 +67,12 @@ export default function DailySettlementPage() {
   }
 
   return (
-    <main className="mx-auto flex max-w-xl flex-col gap-4 p-4 sm:p-6">
+    <main className="mx-auto flex max-w-xl flex-col gap-4 p-4 sm:p-6 lg:max-w-4xl lg:gap-6 lg:p-8">
       <div className="flex items-center justify-between">
         <Button type="button" variant="ghost" size="icon" onClick={() => goToMonth(-1)}>
           <ChevronLeftIcon />
         </Button>
-        <h1 className="text-base font-medium">
+        <h1 className="text-base font-medium lg:text-xl">
           {year}년 {month + 1}월
         </h1>
         <Button type="button" variant="ghost" size="icon" onClick={() => goToMonth(1)}>
@@ -80,71 +81,72 @@ export default function DailySettlementPage() {
       </div>
 
       {groups.length === 0 ? (
-        <p className="text-sm text-muted-foreground">거래 내역이 없습니다</p>
+        <p className="text-sm text-muted-foreground lg:text-base">거래 내역이 없습니다</p>
       ) : (
         <div className="flex flex-col gap-4">
           {groups.map(([date, items]) => (
             <section key={date} className="flex flex-col gap-2">
-              <h2 className="text-sm font-medium text-muted-foreground">
+              <h2 className="text-sm font-medium text-muted-foreground lg:text-base">
                 {formatDateWithWeekday(date)}
               </h2>
-              <ul className="flex flex-col gap-2">
-                {items.map((t) => (
-                  <li
-                    key={t.id}
-                    className="flex flex-col gap-2 rounded-lg px-3 py-2 text-sm ring-1 ring-border"
-                  >
-                    <button
-                      type="button"
-                      className="flex items-center justify-between gap-2 text-left"
-                      onClick={() => setActiveId((id) => (id === t.id ? null : t.id))}
-                    >
-                      <div className="flex flex-col">
-                        <span>
-                          {t.memo || t.category?.name || (t.type === "income" ? "수입" : "지출")}
-                        </span>
-                        {t.memo && (
-                          <span className="text-xs text-muted-foreground">
-                            {t.category?.name ?? "미분류"}
+              <Card size="sm" className="border-primary/30 bg-white">
+                <CardContent>
+                  <ul className="divide-y divide-border">
+                    {items.map((t) => (
+                      <li key={t.id} className="flex flex-col gap-2 py-2 text-sm lg:text-base">
+                        <button
+                          type="button"
+                          className="flex items-center justify-between gap-2 text-left"
+                          onClick={() => setActiveId((id) => (id === t.id ? null : t.id))}
+                        >
+                          <div className="flex flex-col">
+                            <span>
+                              {t.memo || t.category?.name || (t.type === "income" ? "수입" : "지출")}
+                            </span>
+                            {t.memo && (
+                              <span className="text-xs text-muted-foreground lg:text-sm">
+                                {t.category?.name ?? "미분류"}
+                              </span>
+                            )}
+                          </div>
+                          <span
+                            className={cn(
+                              "shrink-0 font-medium tabular-nums",
+                              t.type === "income" ? "text-income" : "text-expense"
+                            )}
+                          >
+                            {formatCurrency(t.amount)}
                           </span>
-                        )}
-                      </div>
-                      <span
-                        className={cn(
-                          "shrink-0 font-medium tabular-nums",
-                          t.type === "income" ? "text-income" : "text-expense"
-                        )}
-                      >
-                        {formatCurrency(t.amount)}
-                      </span>
-                    </button>
+                        </button>
 
-                    {activeId === t.id && (
-                      <div className="flex items-center justify-end gap-1.5 border-t border-border pt-2">
-                        <Button
-                          type="button"
-                          size="xs"
-                          variant="outline"
-                          onClick={() => openEditModal(t)}
-                        >
-                          <PencilIcon className="size-3.5" />
-                          수정
-                        </Button>
-                        <Button
-                          type="button"
-                          size="xs"
-                          variant="outline"
-                          className="text-expense"
-                          onClick={() => handleDelete(t.id)}
-                        >
-                          <Trash2Icon className="size-3.5" />
-                          삭제
-                        </Button>
-                      </div>
-                    )}
-                  </li>
-                ))}
-              </ul>
+                        {activeId === t.id && (
+                          <div className="flex items-center justify-end gap-1.5 border-t border-border pt-2">
+                            <Button
+                              type="button"
+                              size="xs"
+                              variant="outline"
+                              onClick={() => openEditModal(t)}
+                            >
+                              <PencilIcon className="size-3.5" />
+                              수정
+                            </Button>
+                            <Button
+                              type="button"
+                              size="xs"
+                              variant="outline"
+                              className="text-expense"
+                              onClick={() => handleDelete(t.id)}
+                            >
+                              <Trash2Icon className="size-3.5" />
+                              삭제
+                            </Button>
+                          </div>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </CardContent>
+              </Card>
             </section>
           ))}
         </div>

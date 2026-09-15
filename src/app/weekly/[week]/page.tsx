@@ -141,8 +141,8 @@ export default function WeeklyDetailPage({
 
   if (!weekInfo) {
     return (
-      <main className="mx-auto flex max-w-xl flex-col gap-4 p-4 sm:p-6">
-        <p className="text-sm text-muted-foreground">잘못된 주차입니다.</p>
+      <main className="mx-auto flex max-w-xl flex-col gap-4 p-4 sm:p-6 lg:max-w-4xl lg:gap-6 lg:p-8">
+        <p className="text-sm text-muted-foreground lg:text-base">잘못된 주차입니다.</p>
       </main>
     );
   }
@@ -169,7 +169,7 @@ export default function WeeklyDetailPage({
   })();
 
   return (
-    <main className="mx-auto flex max-w-xl flex-col gap-4 p-4 sm:p-6">
+    <main className="mx-auto flex max-w-xl flex-col gap-4 p-4 sm:p-6 lg:max-w-4xl lg:gap-6 lg:p-8">
       <div className="flex items-center justify-between">
         <Link
           href={`/weekly/${prevLink}`}
@@ -177,7 +177,7 @@ export default function WeeklyDetailPage({
         >
           <ChevronLeftIcon className="size-4" />
         </Link>
-        <h1 className="text-base font-medium">
+        <h1 className="text-base font-medium lg:text-xl">
           {weekInfo.weekNumber}주차 · {formatShortDate(weekInfo.from)} ~{" "}
           {formatShortDate(weekInfo.to)}
         </h1>
@@ -199,7 +199,7 @@ export default function WeeklyDetailPage({
       <section className="flex flex-col gap-3">
         <Accordion defaultValue={["category"]}>
           <AccordionItem value="category">
-            <AccordionTrigger className="text-sm font-medium text-muted-foreground">
+            <AccordionTrigger className="text-sm font-medium text-muted-foreground lg:text-base">
               카테고리별 지출
             </AccordionTrigger>
             <AccordionContent>
@@ -208,8 +208,8 @@ export default function WeeklyDetailPage({
           </AccordionItem>
         </Accordion>
 
-        <h2 className="text-sm font-medium text-muted-foreground">요일별 지출</h2>
-        <div className="h-48 w-full">
+        <h2 className="text-sm font-medium text-muted-foreground lg:text-base">요일별 지출</h2>
+        <div className="h-48 w-full lg:h-64">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={chartData} margin={{ top: 4, right: 4, left: 4, bottom: 0 }}>
               <XAxis
@@ -241,22 +241,22 @@ export default function WeeklyDetailPage({
       </section>
 
       <section className="flex flex-col gap-2">
-        <h2 className="text-sm font-medium text-muted-foreground">
+        <h2 className="text-sm font-medium text-muted-foreground lg:text-base">
           {selectedDate ? `${formatShortDate(selectedDate)} 거래 내역` : "막대를 선택하세요"}
         </h2>
         {selectedDate && selectedTransactions.length === 0 && (
-          <p className="text-sm text-muted-foreground">지출 내역이 없습니다</p>
+          <p className="text-sm text-muted-foreground lg:text-base">지출 내역이 없습니다</p>
         )}
         <ul className="flex flex-col gap-2">
           {selectedTransactions.map((t) => (
             <li
               key={t.id}
-              className="flex items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm ring-1 ring-border"
+              className="flex items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm ring-1 ring-border lg:text-base"
             >
               <div className="flex flex-col">
                 <span>{t.memo || t.category?.name || "지출"}</span>
                 {t.memo && (
-                  <span className="text-xs text-muted-foreground">
+                  <span className="text-xs text-muted-foreground lg:text-sm">
                     {t.category?.name ?? "미분류"}
                   </span>
                 )}

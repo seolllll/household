@@ -118,8 +118,8 @@ export default function MonthlyPage({ params }: { params: Promise<{ month: strin
 
   if (!parsed) {
     return (
-      <main className="mx-auto flex max-w-xl flex-col gap-4 p-4 sm:p-6">
-        <p className="text-sm text-muted-foreground">잘못된 월입니다.</p>
+      <main className="mx-auto flex max-w-xl flex-col gap-4 p-4 sm:p-6 lg:max-w-4xl lg:gap-6 lg:p-8">
+        <p className="text-sm text-muted-foreground lg:text-base">잘못된 월입니다.</p>
       </main>
     );
   }
@@ -134,7 +134,7 @@ export default function MonthlyPage({ params }: { params: Promise<{ month: strin
   })();
 
   return (
-    <main className="mx-auto flex max-w-xl flex-col gap-4 p-4 sm:p-6">
+    <main className="mx-auto flex max-w-xl flex-col gap-4 p-4 sm:p-6 lg:max-w-4xl lg:gap-6 lg:p-8">
       <div className="flex items-center justify-between">
         <Link
           href={`/monthly/${prevLink}`}
@@ -142,7 +142,7 @@ export default function MonthlyPage({ params }: { params: Promise<{ month: strin
         >
           <ChevronLeftIcon className="size-4" />
         </Link>
-        <h1 className="text-base font-medium">
+        <h1 className="text-base font-medium lg:text-xl">
           {parsed.year}년 {parsed.month + 1}월 정산
         </h1>
         <Link
@@ -157,17 +157,17 @@ export default function MonthlyPage({ params }: { params: Promise<{ month: strin
 
       <Card size="sm" className="border-primary/30 bg-white">
         <CardContent>
-          <p className="mb-2 text-xs text-muted-foreground">이번 달 예산 진행률</p>
+          <p className="mb-2 text-xs text-muted-foreground lg:text-sm">이번 달 예산 진행률</p>
           <BudgetProgressBar spent={expense} budget={budgetAmount} />
         </CardContent>
       </Card>
 
       <section className="flex flex-col gap-2">
-        <h2 className="text-sm font-medium text-muted-foreground">카테고리별 지출</h2>
+        <h2 className="text-sm font-medium text-muted-foreground lg:text-base">카테고리별 지출</h2>
         <Card size="sm" className="border-primary/30 bg-white">
           <CardContent>
             {categorySummaries.length === 0 ? (
-              <p className="text-sm text-muted-foreground">지출 내역이 없습니다</p>
+              <p className="text-sm text-muted-foreground lg:text-base">지출 내역이 없습니다</p>
             ) : (
               <Accordion>
                 {categorySummaries.map((cat) => {
@@ -194,7 +194,7 @@ export default function MonthlyPage({ params }: { params: Promise<{ month: strin
                           {dailyItems.map((t) => (
                             <li
                               key={t.id}
-                              className="flex items-center justify-between text-xs text-muted-foreground"
+                              className="flex items-center justify-between text-xs text-muted-foreground lg:text-sm"
                             >
                               <span>
                                 {formatShortDate(t.date)}
@@ -218,10 +218,10 @@ export default function MonthlyPage({ params }: { params: Promise<{ month: strin
 
       <Card size="sm" className="border-primary/30 bg-white">
         <CardContent className="flex items-center justify-between">
-          <span className="text-xs text-muted-foreground">다음달로 이월되는 금액</span>
+          <span className="text-xs text-muted-foreground lg:text-sm">다음달로 이월되는 금액</span>
           <span
             className={cn(
-              "text-lg font-semibold tracking-tight sm:text-lg",
+              "text-lg font-semibold tracking-tight sm:text-lg lg:text-2xl",
               carryover < 0 && "text-expense"
             )}
           >

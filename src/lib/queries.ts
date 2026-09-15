@@ -5,6 +5,24 @@ import type { DateRange } from "@/lib/date-range";
 export type TransactionWithCategory = Transaction & { category: Category | null };
 export type BudgetWithCategory = Budget & { category: Category | null };
 
+const CATEGORY_COLOR_PALETTE = [
+  "#2a78d6", // blue
+  "#eb6834", // orange
+  "#1baf7a", // aqua
+  "#eda100", // yellow
+  "#e87ba4", // magenta
+  "#008300", // green
+  "#4a3aa7", // violet
+  "#e34948", // red
+];
+
+function pickCategoryColor(existing: Category[]): string {
+  const used = new Set(existing.map((c) => c.color).filter(Boolean));
+  const available = CATEGORY_COLOR_PALETTE.filter((c) => !used.has(c));
+  const pool = available.length > 0 ? available : CATEGORY_COLOR_PALETTE;
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
 export async function fetchCategories(type: TransactionType): Promise<Category[]> {
   const { data, error } = await supabase
     .from("categories")
@@ -39,7 +57,7 @@ export async function createCategory(name: string, type: TransactionType): Promi
   const nextSortOrder = categories.reduce((max, c) => Math.max(max, c.sort_order), -1) + 1;
   const { error } = await supabase
     .from("categories")
-    .insert({ name, type, sort_order: nextSortOrder });
+    .insert({ name, type, sort_order: nextSortOrder, color: pickCategoryColor(categories) });
   if (error) throw error;
 }
 

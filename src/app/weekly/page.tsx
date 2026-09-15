@@ -65,12 +65,12 @@ export default function WeeklyPage() {
   }
 
   return (
-    <main className="mx-auto flex max-w-xl flex-col gap-4 p-4 sm:p-6">
+    <main className="mx-auto flex max-w-xl flex-col gap-4 p-4 sm:p-6 lg:max-w-4xl lg:gap-6 lg:p-8">
       <div className="flex items-center justify-between">
         <Button type="button" variant="ghost" size="icon" onClick={() => goToMonth(-1)}>
           <ChevronLeftIcon />
         </Button>
-        <h1 className="text-base font-medium">
+        <h1 className="text-base font-medium lg:text-xl">
           {year}년 {month + 1}월
         </h1>
         <Button type="button" variant="ghost" size="icon" onClick={() => goToMonth(1)}>
@@ -80,14 +80,14 @@ export default function WeeklyPage() {
 
       <Card size="sm" className="border-primary/30 bg-white">
         <CardContent className="flex items-center justify-between">
-          <span className="text-xs text-muted-foreground">{month + 1}월 생활비</span>
+          <span className="text-xs text-muted-foreground lg:text-sm">{month + 1}월 생활비</span>
           {editingBudget ? (
             <Input
               autoFocus
               type="number"
               inputMode="numeric"
               min={0}
-              className="w-32 text-right"
+              className="w-32 text-right lg:w-40 lg:text-base"
               value={budgetInput}
               onChange={(e) => setBudgetInput(e.target.value)}
               onBlur={saveBudget}
@@ -100,7 +100,7 @@ export default function WeeklyPage() {
             <button
               type="button"
               onClick={startEditBudget}
-              className="text-lg font-semibold tracking-tight"
+              className="text-lg font-semibold tracking-tight lg:text-2xl"
             >
               {formatCurrency(budgetAmount)}
             </button>
@@ -131,25 +131,25 @@ export default function WeeklyPage() {
                 <CardContent className="flex flex-col gap-3">
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-sm font-medium whitespace-nowrap">
+                      <span className="text-sm font-medium whitespace-nowrap lg:text-base">
                         {week.weekNumber}주차
                       </span>
-                      <span className="text-xs whitespace-nowrap text-muted-foreground">
+                      <span className="text-xs whitespace-nowrap text-muted-foreground lg:text-sm">
                         {formatShortDate(week.from)} ~ {formatShortDate(week.to)}
                       </span>
                       {isCurrentWeek && (
-                        <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[11px] font-medium whitespace-nowrap text-primary">
+                        <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[11px] font-medium whitespace-nowrap text-primary lg:text-xs">
                           이번주
                         </span>
                       )}
                     </div>
-                    <span className="shrink-0 text-sm font-semibold text-expense">
+                    <span className="shrink-0 text-sm font-semibold text-expense lg:text-base">
                       {formatCurrency(weekExpense)}
                     </span>
                   </div>
 
                   <div className="border-t border-border pt-2">
-                    <p className="mb-1.5 text-xs text-muted-foreground">남은 생활비</p>
+                    <p className="mb-1.5 text-xs text-muted-foreground lg:text-sm">남은 생활비</p>
                     <RemainingBudgetBar remaining={remaining} budget={budgetAmount} />
                   </div>
                 </CardContent>

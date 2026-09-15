@@ -23,17 +23,17 @@ export function SummaryCards({ income, expense, firstCard, lastCard }: SummaryCa
   const lastValue = lastCard?.value ?? income - expense;
 
   return (
-    <div className="grid grid-cols-3 gap-3">
-      <Card size="sm" className="min-h-[72px] border-primary/30 bg-white">
+    <div className="grid grid-cols-3 gap-3 lg:gap-4">
+      <Card size="sm" className="min-h-[72px] border-primary/30 bg-white lg:min-h-[96px]">
         <CardHeader>
-          <CardTitle className="text-xs whitespace-nowrap text-muted-foreground">
+          <CardTitle className="text-xs whitespace-nowrap text-muted-foreground lg:text-sm">
             {firstLabel}
           </CardTitle>
         </CardHeader>
         <CardContent>
           <p
             className={cn(
-              "truncate text-base font-semibold tracking-tight sm:text-lg",
+              "truncate text-base font-semibold tracking-tight sm:text-lg lg:text-2xl",
               firstCard ? firstValue < 0 && "text-expense" : "text-income"
             )}
           >
@@ -41,26 +41,28 @@ export function SummaryCards({ income, expense, firstCard, lastCard }: SummaryCa
           </p>
         </CardContent>
       </Card>
-      <Card size="sm" className="min-h-[72px] border-primary/30 bg-white">
+      <Card size="sm" className="min-h-[72px] border-primary/30 bg-white lg:min-h-[96px]">
         <CardHeader>
-          <CardTitle className="text-xs whitespace-nowrap text-muted-foreground">지출</CardTitle>
+          <CardTitle className="text-xs whitespace-nowrap text-muted-foreground lg:text-sm">
+            지출
+          </CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="truncate text-base font-semibold tracking-tight text-expense sm:text-lg">
+          <p className="truncate text-base font-semibold tracking-tight text-expense sm:text-lg lg:text-2xl">
             {formatCurrency(expense)}
           </p>
         </CardContent>
       </Card>
-      <Card size="sm" className="min-h-[72px] border-primary/30 bg-white">
+      <Card size="sm" className="min-h-[72px] border-primary/30 bg-white lg:min-h-[96px]">
         <CardHeader>
-          <CardTitle className="text-xs whitespace-nowrap text-muted-foreground">
+          <CardTitle className="text-xs whitespace-nowrap text-muted-foreground lg:text-sm">
             {lastLabel}
           </CardTitle>
         </CardHeader>
         <CardContent>
           <p
             className={cn(
-              "truncate text-base font-semibold tracking-tight sm:text-lg",
+              "truncate text-base font-semibold tracking-tight sm:text-lg lg:text-2xl",
               lastValue < 0 && "text-expense"
             )}
           >
