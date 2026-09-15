@@ -3,11 +3,10 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
-import { cn } from "cn";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { CategoryBarBreakdown, type CategoryBarItem } from "@/components/category-bar-breakdown";
+import { RemainingBudgetBar } from "@/components/remaining-budget-bar";
 import { formatCurrency, formatShortDate } from "@/lib/format";
 import { getMonthRange, toDateKey } from "@/lib/date-range";
 import { encodeWeekParam, getMonthWeeks } from "@/lib/week";
@@ -29,13 +28,10 @@ export default function WeeklyPage() {
   const [budgetAmount, setBudgetAmount] = useState(0);
   const [editingBudget, setEditingBudget] = useState(false);
   const [budgetInput, setBudgetInput] = useState("");
-  const [expandedWeek, setExpandedWeek] = useState<number | null>(null);
-
   function goToMonth(delta: number) {
     const next = new Date(year, month + delta, 1);
     setYear(next.getFullYear());
     setMonth(next.getMonth());
-    setExpandedWeek(null);
   }
 
   useEffect(() => {
@@ -115,40 +111,24 @@ export default function WeeklyPage() {
       <div className="flex flex-col gap-3">
         {weeks.map((week) => {
           const isCurrentWeek = todayKey >= week.from && todayKey <= week.to;
-          const isExpanded = expandedWeek === week.weekNumber;
 
-          const weekExpenseTx = transactions.filter(
-            (t) => t.type === "expense" && t.date >= week.from && t.date <= week.to
-          );
-          const weekExpense = weekExpenseTx.reduce((sum, t) => sum + t.amount, 0);
+          const weekExpense = transactions
+            .filter((t) => t.type === "expense" && t.date >= week.from && t.date <= week.to)
+            .reduce((sum, t) => sum + t.amount, 0);
 
           const cumulativeExpense = transactions
             .filter((t) => t.type === "expense" && t.date <= week.to)
             .reduce((sum, t) => sum + t.amount, 0);
           const remaining = budgetAmount - cumulativeExpense;
 
-          const categoryMap = new Map<string, CategoryBarItem>();
-          for (const t of weekExpenseTx) {
-            if (!t.category) continue;
-            const existing = categoryMap.get(t.category.id);
-            if (existing) existing.amount += t.amount;
-            else
-              categoryMap.set(t.category.id, {
-                id: t.category.id,
-                name: t.category.name,
-                color: t.category.color ?? "#888780",
-                amount: t.amount,
-              });
-          }
-
           return (
-            <Card key={week.weekNumber} size="sm" className="border-primary/30 bg-white">
-              <CardContent className="flex flex-col gap-3">
-                <button
-                  type="button"
-                  className="flex flex-col gap-2 text-left"
-                  onClick={() => setExpandedWeek(isExpanded ? null : week.weekNumber)}
-                >
+            <Link
+              key={week.weekNumber}
+              href={`/weekly/${encodeWeekParam(year, month, week.weekNumber)}`}
+              className="block"
+            >
+              <Card size="sm" className="border-primary/30 bg-white">
+                <CardContent className="flex flex-col gap-3">
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="text-sm font-medium whitespace-nowrap">
@@ -167,25 +147,14 @@ export default function WeeklyPage() {
                       {formatCurrency(weekExpense)}
                     </span>
                   </div>
-                </button>
 
-                {isExpanded && <CategoryBarBreakdown items={Array.from(categoryMap.values())} />}
-
-                <div className="flex items-center justify-between border-t border-border pt-2 text-xs">
-                  <span className="text-muted-foreground">남은 생활비</span>
-                  <span className={cn("font-medium", remaining < 0 && "text-expense")}>
-                    {formatCurrency(remaining)}
-                  </span>
-                </div>
-
-                <Link
-                  href={`/weekly/${encodeWeekParam(year, month, week.weekNumber)}`}
-                  className="self-end text-xs text-primary hover:underline"
-                >
-                  상세보기
-                </Link>
-              </CardContent>
-            </Card>
+                  <div className="border-t border-border pt-2">
+                    <p className="mb-1.5 text-xs text-muted-foreground">남은 생활비</p>
+                    <RemainingBudgetBar remaining={remaining} budget={budgetAmount} />
+                  </div>
+                </CardContent>
+              </Card>
+            </Link>
           );
         })}
       </div>

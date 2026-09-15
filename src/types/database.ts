@@ -7,6 +7,7 @@ export type Category = {
   icon: string | null;
   color: string | null;
   sort_order: number;
+  is_active: boolean;
   created_at: string;
 };
 

@@ -6,6 +6,13 @@ import { Bar, BarChart, Cell, ResponsiveContainer, Tooltip, XAxis } from "rechar
 import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
 import { cn } from "cn";
 import { SummaryCards } from "@/components/summary-cards";
+import { CategoryBarBreakdown, type CategoryBarItem } from "@/components/category-bar-breakdown";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { formatCurrency, formatShortDate } from "@/lib/format";
 import { enumerateDateKeys, getMonthRange, parseDateKey, toDateKey } from "@/lib/date-range";
 import { decodeWeekParam, encodeWeekParam, getMonthWeeks } from "@/lib/week";
@@ -103,6 +110,23 @@ export default function WeeklyDetailPage({
     });
   }, [weekInfo, transactions]);
 
+  const categoryItems = useMemo<CategoryBarItem[]>(() => {
+    const map = new Map<string, CategoryBarItem>();
+    for (const t of transactions) {
+      if (t.type !== "expense" || !t.category) continue;
+      const existing = map.get(t.category.id);
+      if (existing) existing.amount += t.amount;
+      else
+        map.set(t.category.id, {
+          id: t.category.id,
+          name: t.category.name,
+          color: t.category.color ?? "#888780",
+          amount: t.amount,
+        });
+    }
+    return Array.from(map.values());
+  }, [transactions]);
+
   const income = transactions
     .filter((t) => t.type === "income")
     .reduce((sum, t) => sum + t.amount, 0);
@@ -168,10 +192,22 @@ export default function WeeklyDetailPage({
       <SummaryCards
         income={income}
         expense={expense}
-        firstCard={{ label: "남은 생활비", value: remaining }}
+        firstCard={{ label: "잔액", value: remaining + expense }}
+        lastCard={{ label: "남은 생활비", value: remaining }}
       />
 
       <section className="flex flex-col gap-3">
+        <Accordion defaultValue={["category"]}>
+          <AccordionItem value="category">
+            <AccordionTrigger className="text-sm font-medium text-muted-foreground">
+              카테고리별 지출
+            </AccordionTrigger>
+            <AccordionContent>
+              <CategoryBarBreakdown items={categoryItems} />
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
+
         <h2 className="text-sm font-medium text-muted-foreground">요일별 지출</h2>
         <div className="h-48 w-full">
           <ResponsiveContainer width="100%" height="100%">

@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "cn";
+import { ArrowLeftIcon, PencilIcon, Settings2Icon, Trash2Icon } from "lucide-react";
 
 // tui-date-picker touches `window` at module load time, which breaks Next's
 // server-side render of this client component — load it in the browser only.
@@ -21,9 +22,12 @@ const DatePickerInput = dynamic(
   { ssr: false }
 );
 import {
+  createCategory,
   createTransaction,
+  deleteCategory,
   fetchCategories,
   fetchRecentCategoryIds,
+  updateCategory,
   updateTransaction,
   type TransactionWithCategory,
 } from "@/lib/queries";
@@ -59,24 +63,28 @@ export function QuickAddModal({
   const [date, setDate] = useState(() => transaction?.date ?? toDateKey(new Date()));
   const [memo, setMemo] = useState(transaction?.memo ?? "");
   const [saving, setSaving] = useState(false);
+  const [view, setView] = useState<"form" | "manage">("form");
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null);
+  const [editingCategoryName, setEditingCategoryName] = useState("");
+  const [categoryError, setCategoryError] = useState<string | null>(null);
+
+  async function loadCategories() {
+    const [cats, recentIds] = await Promise.all([
+      fetchCategories(type),
+      fetchRecentCategoryIds(type),
+    ]);
+    setCategories(orderByRecent(cats, recentIds));
+    setCategoryId((current) =>
+      current && cats.some((c) => c.id === current) ? current : null
+    );
+  }
 
   useEffect(() => {
     if (!open) return;
-    let cancelled = false;
     (async () => {
-      const [cats, recentIds] = await Promise.all([
-        fetchCategories(type),
-        fetchRecentCategoryIds(type),
-      ]);
-      if (cancelled) return;
-      setCategories(orderByRecent(cats, recentIds));
-      setCategoryId((current) =>
-        current && cats.some((c) => c.id === current) ? current : null
-      );
+      await loadCategories();
     })();
-    return () => {
-      cancelled = true;
-    };
   }, [open, type]);
 
   function resetForm() {
@@ -85,6 +93,47 @@ export function QuickAddModal({
     setAmount("");
     setDate(toDateKey(new Date()));
     setMemo("");
+    setView("form");
+    setNewCategoryName("");
+    setActiveCategoryId(null);
+    setCategoryError(null);
+  }
+
+  async function handleAddCategory() {
+    const name = newCategoryName.trim();
+    if (!name) return;
+    setCategoryError(null);
+    try {
+      await createCategory(name, type);
+      setNewCategoryName("");
+      await loadCategories();
+    } catch {
+      setCategoryError("카테고리를 추가하지 못했습니다");
+    }
+  }
+
+  async function handleSaveCategoryName(id: string) {
+    const name = editingCategoryName.trim();
+    if (!name) return;
+    setCategoryError(null);
+    try {
+      await updateCategory(id, name);
+      setActiveCategoryId(null);
+      await loadCategories();
+    } catch {
+      setCategoryError("카테고리를 수정하지 못했습니다");
+    }
+  }
+
+  async function handleDeleteCategory(id: string) {
+    setCategoryError(null);
+    try {
+      await deleteCategory(id);
+      setActiveCategoryId(null);
+      await loadCategories();
+    } catch {
+      setCategoryError("카테고리를 삭제하지 못했습니다");
+    }
   }
 
   const amountValue = Number(amount);
@@ -124,85 +173,186 @@ export function QuickAddModal({
     >
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{transaction ? "수정" : "추가"}</DialogTitle>
+          <div className="flex items-center gap-1.5">
+            {view === "manage" && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => setView("form")}
+              >
+                <ArrowLeftIcon />
+                <span className="sr-only">뒤로</span>
+              </Button>
+            )}
+            <DialogTitle>
+              {view === "manage" ? "카테고리 관리" : transaction ? "수정" : "추가"}
+            </DialogTitle>
+          </div>
         </DialogHeader>
 
-        <div className="flex flex-col gap-4">
-          <div className="grid grid-cols-2 gap-2">
-            <Button
-              type="button"
-              variant={type === "expense" ? "default" : "outline"}
-              onClick={() => setType("expense")}
-            >
-              지출
-            </Button>
-            <Button
-              type="button"
-              variant={type === "income" ? "default" : "outline"}
-              onClick={() => setType("income")}
-            >
-              수입
-            </Button>
-          </div>
-
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="quick-add-amount">금액</Label>
-            <Input
-              id="quick-add-amount"
-              type="number"
-              inputMode="numeric"
-              min={0}
-              placeholder="0"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-            />
-          </div>
-
-          <div className="flex flex-col gap-1.5">
-            <Label>카테고리</Label>
-            <div className="flex flex-wrap gap-1.5">
-              {categories.map((c) => (
-                <button
-                  key={c.id}
-                  type="button"
-                  onClick={() => setCategoryId(c.id)}
-                  className={cn(
-                    "rounded-lg border px-2.5 py-1 text-sm transition-colors",
-                    categoryId === c.id
-                      ? "border-transparent bg-primary text-primary-foreground"
-                      : "border-border bg-background text-foreground hover:bg-muted"
-                  )}
-                >
-                  {c.name}
-                </button>
-              ))}
+        {view === "manage" ? (
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-1.5">
+              {categories.map((c) =>
+                activeCategoryId === c.id ? (
+                  <div
+                    key={c.id}
+                    className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm ring-1 ring-border"
+                  >
+                    <Input
+                      value={editingCategoryName}
+                      onChange={(e) => setEditingCategoryName(e.target.value)}
+                      className="h-7 flex-1 text-sm"
+                      autoFocus
+                    />
+                    <Button
+                      type="button"
+                      size="xs"
+                      variant="outline"
+                      onClick={() => handleSaveCategoryName(c.id)}
+                    >
+                      <PencilIcon className="size-3.5" />
+                      수정
+                    </Button>
+                    <Button
+                      type="button"
+                      size="xs"
+                      variant="outline"
+                      className="text-expense"
+                      onClick={() => handleDeleteCategory(c.id)}
+                    >
+                      <Trash2Icon className="size-3.5" />
+                      삭제
+                    </Button>
+                  </div>
+                ) : (
+                  <button
+                    key={c.id}
+                    type="button"
+                    className="rounded-lg px-3 py-2 text-left text-sm ring-1 ring-border"
+                    onClick={() => {
+                      setActiveCategoryId(c.id);
+                      setEditingCategoryName(c.name);
+                    }}
+                  >
+                    {c.name}
+                  </button>
+                )
+              )}
               {categories.length === 0 && (
                 <p className="text-sm text-muted-foreground">등록된 카테고리가 없습니다</p>
               )}
             </div>
-          </div>
 
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="quick-add-date">날짜</Label>
-            <DatePickerInput id="quick-add-date" value={date} onChange={setDate} />
-          </div>
+            <div className="flex items-center gap-1.5">
+              <Input
+                placeholder="새 카테고리 이름"
+                value={newCategoryName}
+                onChange={(e) => setNewCategoryName(e.target.value)}
+              />
+              <Button type="button" onClick={handleAddCategory}>
+                추가
+              </Button>
+            </div>
 
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="quick-add-memo">메모</Label>
-            <Input
-              id="quick-add-memo"
-              type="text"
-              placeholder="메모 (선택)"
-              value={memo}
-              onChange={(e) => setMemo(e.target.value)}
-            />
+            {categoryError && <p className="text-sm text-expense">{categoryError}</p>}
           </div>
-        </div>
+        ) : (
+          <div className="flex flex-col gap-4">
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                type="button"
+                variant={type === "expense" ? "default" : "outline"}
+                onClick={() => setType("expense")}
+              >
+                지출
+              </Button>
+              <Button
+                type="button"
+                variant={type === "income" ? "default" : "outline"}
+                onClick={() => setType("income")}
+              >
+                수입
+              </Button>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="quick-add-amount">금액</Label>
+              <Input
+                id="quick-add-amount"
+                type="number"
+                inputMode="numeric"
+                min={0}
+                placeholder="0"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+              />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <div className="flex items-center justify-between">
+                <Label>카테고리</Label>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={() => setView("manage")}
+                >
+                  <Settings2Icon />
+                  <span className="sr-only">카테고리 관리</span>
+                </Button>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {categories.map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => setCategoryId(c.id)}
+                    className={cn(
+                      "rounded-lg border px-2.5 py-1 text-sm transition-colors",
+                      categoryId === c.id
+                        ? "border-transparent bg-primary text-primary-foreground"
+                        : "border-border bg-background text-foreground hover:bg-muted"
+                    )}
+                  >
+                    {c.name}
+                  </button>
+                ))}
+                {categories.length === 0 && (
+                  <p className="text-sm text-muted-foreground">등록된 카테고리가 없습니다</p>
+                )}
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="quick-add-date">날짜</Label>
+              <DatePickerInput id="quick-add-date" value={date} onChange={setDate} />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="quick-add-memo">메모</Label>
+              <Input
+                id="quick-add-memo"
+                type="text"
+                placeholder="메모 (선택)"
+                value={memo}
+                onChange={(e) => setMemo(e.target.value)}
+              />
+            </div>
+          </div>
+        )}
 
         <DialogFooter>
-          <Button type="button" disabled={!isValid || saving} onClick={handleSave}>
-            {saving ? "저장 중..." : "저장"}
-          </Button>
+          {view === "manage" ? (
+            <Button type="button" variant="outline" onClick={() => setView("form")}>
+              완료
+            </Button>
+          ) : (
+            <Button type="button" disabled={!isValid || saving} onClick={handleSave}>
+              {saving ? "저장 중..." : "저장"}
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

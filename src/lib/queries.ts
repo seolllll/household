@@ -10,9 +10,47 @@ export async function fetchCategories(type: TransactionType): Promise<Category[]
     .from("categories")
     .select("*")
     .eq("type", type)
+    .eq("is_active", true)
     .order("sort_order", { ascending: true });
   if (error) throw error;
   return data ?? [];
+}
+
+export async function createCategory(name: string, type: TransactionType): Promise<void> {
+  const { data: inactive, error: findError } = await supabase
+    .from("categories")
+    .select("id")
+    .eq("type", type)
+    .eq("name", name)
+    .eq("is_active", false)
+    .maybeSingle();
+  if (findError) throw findError;
+
+  if (inactive) {
+    const { error } = await supabase
+      .from("categories")
+      .update({ is_active: true })
+      .eq("id", inactive.id);
+    if (error) throw error;
+    return;
+  }
+
+  const categories = await fetchCategories(type);
+  const nextSortOrder = categories.reduce((max, c) => Math.max(max, c.sort_order), -1) + 1;
+  const { error } = await supabase
+    .from("categories")
+    .insert({ name, type, sort_order: nextSortOrder });
+  if (error) throw error;
+}
+
+export async function updateCategory(id: string, name: string): Promise<void> {
+  const { error } = await supabase.from("categories").update({ name }).eq("id", id);
+  if (error) throw error;
+}
+
+export async function deleteCategory(id: string): Promise<void> {
+  const { error } = await supabase.from("categories").update({ is_active: false }).eq("id", id);
+  if (error) throw error;
 }
 
 export async function fetchRecentCategoryIds(
