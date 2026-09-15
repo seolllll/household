@@ -34,7 +34,7 @@ export async function fetchCategories(type: TransactionType): Promise<Category[]
   return data ?? [];
 }
 
-export async function createCategory(name: string, type: TransactionType): Promise<void> {
+export async function createCategory(name: string, type: TransactionType): Promise<string> {
   const { data: inactive, error: findError } = await supabase
     .from("categories")
     .select("id")
@@ -50,15 +50,18 @@ export async function createCategory(name: string, type: TransactionType): Promi
       .update({ is_active: true })
       .eq("id", inactive.id);
     if (error) throw error;
-    return;
+    return inactive.id;
   }
 
   const categories = await fetchCategories(type);
   const nextSortOrder = categories.reduce((max, c) => Math.max(max, c.sort_order), -1) + 1;
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("categories")
-    .insert({ name, type, sort_order: nextSortOrder, color: pickCategoryColor(categories) });
+    .insert({ name, type, sort_order: nextSortOrder, color: pickCategoryColor(categories) })
+    .select("id")
+    .single();
   if (error) throw error;
+  return data.id;
 }
 
 export async function updateCategory(id: string, name: string): Promise<void> {

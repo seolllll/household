@@ -1,12 +1,36 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { ChevronLeftIcon, ChevronRightIcon, PencilIcon, PlusIcon, Trash2Icon } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  Loader2Icon,
+  PencilIcon,
+  PlusIcon,
+  Trash2Icon,
+  UploadIcon,
+} from "lucide-react";
 import { cn } from "cn";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { QuickAddModal } from "@/components/quick-add-modal";
-import { deleteTransaction, fetchTransactions, type TransactionWithCategory } from "@/lib/queries";
+import {
+  createCategory,
+  createTransaction,
+  deleteTransaction,
+  fetchCategories,
+  fetchTransactions,
+  type TransactionWithCategory,
+} from "@/lib/queries";
+import { parseImportFile } from "@/lib/import-excel";
 import { formatCurrency, formatDateWithWeekday } from "@/lib/format";
 import { getMonthRange } from "@/lib/date-range";
 
@@ -21,6 +45,10 @@ export default function DailySettlementPage() {
   );
   const [activeId, setActiveId] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [importStatus, setImportStatus] = useState<string | null>(null);
+  const [importResultOpen, setImportResultOpen] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -66,6 +94,62 @@ export default function DailySettlementPage() {
     setRefreshKey((k) => k + 1);
   }
 
+  async function handleFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+
+    setImporting(true);
+    setImportStatus(null);
+    try {
+      const items = await parseImportFile(file);
+      const [incomeCategories, expenseCategories] = await Promise.all([
+        fetchCategories("income"),
+        fetchCategories("expense"),
+      ]);
+      const categoryIdByKey = new Map<string, string>();
+      for (const c of incomeCategories) categoryIdByKey.set(`income:${c.name}`, c.id);
+      for (const c of expenseCategories) categoryIdByKey.set(`expense:${c.name}`, c.id);
+
+      let added = 0;
+      let skipped = 0;
+      for (const item of items) {
+        const key = `${item.type}:${item.categoryName}`;
+        try {
+          let categoryId = categoryIdByKey.get(key);
+          if (!categoryId) {
+            categoryId = await createCategory(item.categoryName, item.type);
+            categoryIdByKey.set(key, categoryId);
+          }
+          await createTransaction({
+            type: item.type,
+            amount: item.amount,
+            category_id: categoryId,
+            date: item.date,
+            memo: item.memo,
+          });
+          added++;
+        } catch {
+          skipped++;
+        }
+      }
+
+      setImportStatus(
+        items.length === 0
+          ? "가져올 내역이 없습니다"
+          : skipped > 0
+            ? `${added}건 추가됨, ${skipped}건 실패`
+            : `${added}건 추가됨`
+      );
+      setRefreshKey((k) => k + 1);
+    } catch {
+      setImportStatus("파일을 읽지 못했습니다");
+    } finally {
+      setImporting(false);
+      setImportResultOpen(true);
+    }
+  }
+
   return (
     <main className="mx-auto flex max-w-xl flex-col gap-4 p-4 sm:p-6 lg:max-w-4xl lg:gap-6 lg:p-8">
       <div className="flex items-center justify-between">
@@ -75,9 +159,28 @@ export default function DailySettlementPage() {
         <h1 className="text-base font-medium lg:text-xl">
           {year}년 {month + 1}월
         </h1>
-        <Button type="button" variant="ghost" size="icon" onClick={() => goToMonth(1)}>
-          <ChevronRightIcon />
-        </Button>
+        <div className="flex items-center gap-1">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            disabled={importing}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            {importing ? <Loader2Icon className="animate-spin" /> : <UploadIcon />}
+            <span className="sr-only">엑셀 업로드</span>
+          </Button>
+          <Button type="button" variant="ghost" size="icon" onClick={() => goToMonth(1)}>
+            <ChevronRightIcon />
+          </Button>
+        </div>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".xlsx"
+          className="hidden"
+          onChange={handleFileSelected}
+        />
       </div>
 
       {groups.length === 0 ? (
@@ -172,6 +275,20 @@ export default function DailySettlementPage() {
         onSaved={() => setRefreshKey((k) => k + 1)}
         transaction={editingTransaction}
       />
+
+      <Dialog open={importResultOpen} onOpenChange={setImportResultOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>엑셀 업로드</DialogTitle>
+            <DialogDescription>{importStatus}</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" onClick={() => setImportResultOpen(false)}>
+              확인
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </main>
   );
 }

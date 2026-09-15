@@ -70,6 +70,21 @@ export default function CalendarPage() {
     [transactions, selectedDate]
   );
 
+  const selectedIncome = useMemo(
+    () =>
+      selectedTransactions
+        .filter((t) => t.type === "income")
+        .reduce((sum, t) => sum + t.amount, 0),
+    [selectedTransactions]
+  );
+  const selectedExpense = useMemo(
+    () =>
+      selectedTransactions
+        .filter((t) => t.type === "expense")
+        .reduce((sum, t) => sum + t.amount, 0),
+    [selectedTransactions]
+  );
+
   function goToMonth(delta: number) {
     const next = new Date(year, month + delta, 1);
     setYear(next.getFullYear());
@@ -142,29 +157,37 @@ export default function CalendarPage() {
                 날짜를 선택하면 거래 내역이 표시됩니다
               </p>
             ) : (
-              <ul className="divide-y divide-border">
-                {selectedTransactions.map((t) => (
-                  <li
-                    key={t.id}
-                    className="flex items-center justify-between gap-2 py-2 text-sm lg:text-base"
-                  >
-                    <div className="flex flex-col">
-                      <span>{t.category?.name ?? "미분류"}</span>
-                      {t.memo && (
-                        <span className="text-xs text-muted-foreground lg:text-sm">{t.memo}</span>
-                      )}
-                    </div>
-                    <span
-                      className={cn(
-                        "shrink-0 font-medium tabular-nums",
-                        t.type === "income" ? "text-income" : "text-expense"
-                      )}
+              <>
+                <div className="mb-2 flex items-center justify-between border-b border-border pb-2 text-sm lg:text-base">
+                  <span className="text-income">수입 {formatCurrency(selectedIncome)}</span>
+                  <span className="text-expense">지출 {formatCurrency(selectedExpense)}</span>
+                </div>
+                <ul className="divide-y divide-border">
+                  {selectedTransactions.map((t) => (
+                    <li
+                      key={t.id}
+                      className="flex items-center justify-between gap-2 py-2 text-sm lg:text-base"
                     >
-                      {formatCurrency(t.amount)}
-                    </span>
-                  </li>
-                ))}
-              </ul>
+                      <div className="flex flex-col">
+                        <span>{t.category?.name ?? "미분류"}</span>
+                        {t.memo && (
+                          <span className="text-xs text-muted-foreground lg:text-sm">
+                            {t.memo}
+                          </span>
+                        )}
+                      </div>
+                      <span
+                        className={cn(
+                          "shrink-0 font-medium tabular-nums",
+                          t.type === "income" ? "text-income" : "text-expense"
+                        )}
+                      >
+                        {formatCurrency(t.amount)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </>
             )}
           </CardContent>
         </Card>
