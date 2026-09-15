@@ -33,7 +33,27 @@
   - 캘린더 아이콘(SVG) 클릭 시 `elem.className.split is not a function` 크래시 → 아이콘에 `pointer-events-none` 추가로 해결 (SVG의 `className`은 문자열이 아닌 `SVGAnimatedString`이라 라이브러리 내부 클래스 처리 로직이 깨졌던 것).
   - 팝업 캘린더가 input 아래가 아니라 위로 뜨도록 `globals.css`에 위치 오버라이드 CSS 추가.
 
+## 2026-09-15
+
+### 환경
+- `Module not found: Can't resolve 'tui-date-picker'` 오류 확인: `package.json`/`package-lock.json`에는 있지만 `node_modules`에 실제 설치가 누락된 상태였음. `npm install`로 해결.
+
+### 카테고리 추가/수정/삭제 설정 기능
+- `QuickAddModal`에 뷰 전환(`form` / `manage`) 방식으로 구현 (모달 위에 모달을 띄우는 대신 같은 Dialog 안에서 전환, 뒤로가기 버튼으로 복귀).
+  - 카테고리 라벨 옆 설정(톱니바퀴) 아이콘 → 카테고리 관리 화면. 목록의 항목을 탭하면 그 칸 자체가 입력창 + 수정/삭제 버튼으로 바뀜(이름 중복 표시 없이 한 칸에서 수정).
+  - 하단에 새 카테고리 추가 입력창.
+- `queries.ts`에 `createCategory`, `updateCategory`, `deleteCategory` 추가.
+- 카테고리 삭제는 소프트 삭제로 구현: `categories`에 `is_active` 컬럼 추가(Supabase에서 직접 실행), `deleteCategory`는 `is_active = false`로만 변경. 과거 거래는 FK 그대로 유지되고 정상 조회됨.
+  - `fetchCategories`는 `is_active = true`만 조회.
+  - `createCategory`는 동일 이름+타입의 비활성 카테고리가 있으면 새로 만들지 않고 재활성화(같은 id 재사용, 중복 생성 방지).
+
+### 주간정산
+- `RemainingBudgetBar` 컴포넌트 신규 추가: 남은 생활비 비율만큼 채워지고 지출이 늘수록 공백이 커지는 바(월말정산의 지출 채움 방향과 반대). `/weekly` 목록의 각 주차 박스 안에 적용.
+- `/weekly` 목록: "상세보기" 버튼 제거, 박스 전체를 클릭하면 상세보기로 이동하도록 변경. 대신 박스를 눌러 펼치던 카테고리별 지출 내역(인라인) 기능은 제거.
+- `/weekly/[week]` 상세보기: 제거된 카테고리별 지출 내역을 아코디언(기본 펼침, 화살표로 접기/펼치기)으로 이동해 추가.
+- `SummaryCards`에 `lastCard` override prop 추가(미지정 시 기존처럼 `잔액 = 수입 - 지출`, 월말정산 등 다른 화면은 영향 없음).
+- `/weekly/[week]` 카드 순서/의미 수정: 잔액(지난주까지 남은 생활비) → 지출(이번 주) → 남은 생활비(이번 주 반영 후) 순서로, 잔액 - 지출 = 남은 생활비가 되도록 계산.
+
 ## 다음 작업 (예정)
-- [ ] 카테고리 추가/수정/삭제 설정 기능
 - [ ] 엑셀 다운로드 기능
 - [ ] (추가 예정 항목 있음)
