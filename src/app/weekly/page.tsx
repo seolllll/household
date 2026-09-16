@@ -5,15 +5,14 @@ import Link from "next/link";
 import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { RemainingBudgetBar } from "@/components/remaining-budget-bar";
 import { formatCurrency, formatShortDate } from "@/lib/format";
 import { getMonthRange, toDateKey } from "@/lib/date-range";
-import { encodeWeekParam, getMonthWeeks } from "@/lib/week";
+import { encodeWeekParam, getMonthWeeks, isWeeklyBudgetExpense } from "@/lib/week";
 import {
   fetchMonthlyBudget,
   fetchTransactions,
-  upsertMonthlyBudget,
+  fetchWeeklyBudgetItems,
   type TransactionWithCategory,
 } from "@/lib/queries";
 
@@ -26,8 +25,8 @@ export default function WeeklyPage() {
 
   const [transactions, setTransactions] = useState<TransactionWithCategory[]>([]);
   const [budgetAmount, setBudgetAmount] = useState(0);
-  const [editingBudget, setEditingBudget] = useState(false);
-  const [budgetInput, setBudgetInput] = useState("");
+  const [weeklyBudgetMap, setWeeklyBudgetMap] = useState<Record<string, number>>({});
+
   function goToMonth(delta: number) {
     const next = new Date(year, month + delta, 1);
     setYear(next.getFullYear());
@@ -37,32 +36,26 @@ export default function WeeklyPage() {
   useEffect(() => {
     let cancelled = false;
     const range = getMonthRange(year, month);
-    Promise.all([fetchTransactions(range), fetchMonthlyBudget(monthKey)]).then(
-      ([tx, budget]) => {
-        if (cancelled) return;
-        setTransactions(tx);
-        setBudgetAmount(budget?.amount ?? 0);
+    Promise.all([
+      fetchTransactions(range),
+      fetchMonthlyBudget(monthKey),
+      fetchWeeklyBudgetItems(range),
+    ]).then(([tx, budget, weeklyBudgetItemRows]) => {
+      if (cancelled) return;
+      setTransactions(tx);
+      setBudgetAmount(budget?.amount ?? 0);
+      const totals: Record<string, number> = {};
+      for (const item of weeklyBudgetItemRows) {
+        totals[item.week_start] = (totals[item.week_start] ?? 0) + item.amount;
       }
-    );
+      setWeeklyBudgetMap(totals);
+    });
     return () => {
       cancelled = true;
     };
   }, [year, month, monthKey]);
 
   const weeks = useMemo(() => getMonthWeeks(year, month), [year, month]);
-
-  function startEditBudget() {
-    setBudgetInput(String(budgetAmount));
-    setEditingBudget(true);
-  }
-
-  async function saveBudget() {
-    const value = Number(budgetInput);
-    setEditingBudget(false);
-    if (!Number.isFinite(value) || value < 0) return;
-    setBudgetAmount(value);
-    await upsertMonthlyBudget(monthKey, value);
-  }
 
   return (
     <main className="mx-auto flex max-w-xl flex-col gap-4 p-4 sm:p-6 lg:max-w-4xl lg:gap-6 lg:p-8">
@@ -81,30 +74,9 @@ export default function WeeklyPage() {
       <Card size="sm" className="border-primary/30 bg-white">
         <CardContent className="flex items-center justify-between">
           <span className="text-xs text-muted-foreground lg:text-sm">{month + 1}월 생활비</span>
-          {editingBudget ? (
-            <Input
-              autoFocus
-              type="number"
-              inputMode="numeric"
-              min={0}
-              className="w-32 text-right lg:w-40 lg:text-base"
-              value={budgetInput}
-              onChange={(e) => setBudgetInput(e.target.value)}
-              onBlur={saveBudget}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") e.currentTarget.blur();
-                if (e.key === "Escape") setEditingBudget(false);
-              }}
-            />
-          ) : (
-            <button
-              type="button"
-              onClick={startEditBudget}
-              className="text-lg font-semibold tracking-tight lg:text-2xl"
-            >
-              {formatCurrency(budgetAmount)}
-            </button>
-          )}
+          <span className="text-lg font-semibold tracking-tight lg:text-2xl">
+            {formatCurrency(budgetAmount)}
+          </span>
         </CardContent>
       </Card>
 
@@ -113,11 +85,11 @@ export default function WeeklyPage() {
           const isCurrentWeek = todayKey >= week.from && todayKey <= week.to;
 
           const weekExpense = transactions
-            .filter((t) => t.type === "expense" && t.date >= week.from && t.date <= week.to)
+            .filter((t) => isWeeklyBudgetExpense(t) && t.date >= week.from && t.date <= week.to)
             .reduce((sum, t) => sum + t.amount, 0);
 
           const cumulativeExpense = transactions
-            .filter((t) => t.type === "expense" && t.date <= week.to)
+            .filter((t) => isWeeklyBudgetExpense(t) && t.date <= week.to)
             .reduce((sum, t) => sum + t.amount, 0);
           const remaining = budgetAmount - cumulativeExpense;
 
@@ -143,8 +115,15 @@ export default function WeeklyPage() {
                         </span>
                       )}
                     </div>
-                    <span className="shrink-0 text-sm font-semibold text-expense lg:text-base">
-                      {formatCurrency(weekExpense)}
+                    <span className="flex shrink-0 items-baseline gap-1">
+                      <span className="text-sm font-semibold text-expense lg:text-base">
+                        {formatCurrency(weekExpense)}
+                      </span>
+                      {weeklyBudgetMap[week.from] != null && (
+                        <span className="text-xs text-muted-foreground lg:text-sm">
+                          / {formatCurrency(weeklyBudgetMap[week.from])}
+                        </span>
+                      )}
                     </span>
                   </div>
 

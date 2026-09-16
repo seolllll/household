@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/accordion";
 import { formatCurrency, formatShortDate } from "@/lib/format";
 import { enumerateDateKeys, getMonthRange, parseDateKey, toDateKey } from "@/lib/date-range";
-import { decodeWeekParam, encodeWeekParam, getMonthWeeks } from "@/lib/week";
+import { decodeWeekParam, encodeWeekParam, getMonthWeeks, isWeeklyBudgetExpense } from "@/lib/week";
 import {
   fetchMonthlyBudget,
   fetchTransactions,
@@ -89,9 +89,7 @@ export default function WeeklyDetailPage({
       if (cancelled) return;
       setTransactions(weekTx);
       setCumulativeExpense(
-        cumulativeTx
-          .filter((t) => t.type === "expense")
-          .reduce((sum, t) => sum + t.amount, 0)
+        cumulativeTx.filter(isWeeklyBudgetExpense).reduce((sum, t) => sum + t.amount, 0)
       );
       setBudgetAmount(budget?.amount ?? 0);
     });
@@ -104,7 +102,7 @@ export default function WeeklyDetailPage({
     if (!weekInfo) return [];
     return enumerateDateKeys(weekInfo.from, weekInfo.to).map((date) => {
       const expense = transactions
-        .filter((t) => t.type === "expense" && t.date === date)
+        .filter((t) => isWeeklyBudgetExpense(t) && t.date === date)
         .reduce((sum, t) => sum + t.amount, 0);
       return { date, label: WEEKDAYS[parseDateKey(date).getDay()], expense };
     });
@@ -113,7 +111,7 @@ export default function WeeklyDetailPage({
   const categoryItems = useMemo<CategoryBarItem[]>(() => {
     const map = new Map<string, CategoryBarItem>();
     for (const t of transactions) {
-      if (t.type !== "expense" || !t.category) continue;
+      if (!isWeeklyBudgetExpense(t) || !t.category) continue;
       const existing = map.get(t.category.id);
       if (existing) existing.amount += t.amount;
       else
@@ -131,12 +129,12 @@ export default function WeeklyDetailPage({
     .filter((t) => t.type === "income")
     .reduce((sum, t) => sum + t.amount, 0);
   const expense = transactions
-    .filter((t) => t.type === "expense")
+    .filter(isWeeklyBudgetExpense)
     .reduce((sum, t) => sum + t.amount, 0);
   const remaining = budgetAmount - cumulativeExpense;
 
   const selectedTransactions = transactions.filter(
-    (t) => t.type === "expense" && t.date === selectedDate
+    (t) => isWeeklyBudgetExpense(t) && t.date === selectedDate
   );
 
   if (!weekInfo) {

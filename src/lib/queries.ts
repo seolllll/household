@@ -1,9 +1,19 @@
 import { supabase } from "@/lib/supabase/client";
-import type { Budget, Category, MonthlyBudget, Transaction, TransactionType } from "@/types/database";
+import type {
+  AssetItem,
+  AssetSnapshot,
+  Budget,
+  Category,
+  MonthlyBudget,
+  Transaction,
+  TransactionType,
+  WeeklyBudgetItem,
+} from "@/types/database";
 import type { DateRange } from "@/lib/date-range";
 
 export type TransactionWithCategory = Transaction & { category: Category | null };
 export type BudgetWithCategory = Budget & { category: Category | null };
+export type WeeklyBudgetItemWithCategory = WeeklyBudgetItem & { category: Category | null };
 
 const CATEGORY_COLOR_PALETTE = [
   "#2a78d6", // blue
@@ -155,6 +165,38 @@ export async function upsertMonthlyBudget(month: string, amount: number): Promis
   if (error) throw error;
 }
 
+export async function fetchWeeklyBudgetItems(range: DateRange): Promise<WeeklyBudgetItemWithCategory[]> {
+  const { data, error } = await supabase
+    .from("weekly_budget_items")
+    .select("*, category:categories(*)")
+    .gte("week_start", range.from)
+    .lte("week_start", range.to);
+  if (error) throw error;
+  return (data ?? []) as unknown as WeeklyBudgetItemWithCategory[];
+}
+
+export interface WeeklyBudgetItemInput {
+  week_start: string;
+  category_id: string;
+  amount: number;
+  memo: string | null;
+}
+
+export async function createWeeklyBudgetItem(input: WeeklyBudgetItemInput): Promise<void> {
+  const { error } = await supabase.from("weekly_budget_items").insert(input);
+  if (error) throw error;
+}
+
+export async function updateWeeklyBudgetItem(id: string, input: WeeklyBudgetItemInput): Promise<void> {
+  const { error } = await supabase.from("weekly_budget_items").update(input).eq("id", id);
+  if (error) throw error;
+}
+
+export async function deleteWeeklyBudgetItem(id: string): Promise<void> {
+  const { error } = await supabase.from("weekly_budget_items").delete().eq("id", id);
+  if (error) throw error;
+}
+
 export async function fetchBudgets(month: string): Promise<BudgetWithCategory[]> {
   const { data, error } = await supabase
     .from("budgets")
@@ -162,4 +204,53 @@ export async function fetchBudgets(month: string): Promise<BudgetWithCategory[]>
     .eq("month", month);
   if (error) throw error;
   return (data ?? []) as unknown as BudgetWithCategory[];
+}
+
+export async function upsertBudget(
+  categoryId: string,
+  month: string,
+  label: string,
+  amount: number,
+  reason: string | null,
+  feedback: string | null
+): Promise<void> {
+  const { error } = await supabase
+    .from("budgets")
+    .upsert(
+      { category_id: categoryId, month, label, amount, reason, feedback },
+      { onConflict: "category_id,month,label" }
+    );
+  if (error) throw error;
+}
+
+export async function fetchAssetItems(): Promise<AssetItem[]> {
+  const { data, error } = await supabase
+    .from("asset_items")
+    .select("*")
+    .eq("is_active", true)
+    .order("sort_order", { ascending: true });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function fetchAssetSnapshots(month: string): Promise<AssetSnapshot[]> {
+  const { data, error } = await supabase.from("asset_snapshots").select("*").eq("month", month);
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function upsertAssetSnapshot(
+  assetItemId: string,
+  month: string,
+  amount: number,
+  reason: string | null,
+  feedback: string | null
+): Promise<void> {
+  const { error } = await supabase
+    .from("asset_snapshots")
+    .upsert(
+      { asset_item_id: assetItemId, month, amount, reason, feedback },
+      { onConflict: "asset_item_id,month" }
+    );
+  if (error) throw error;
 }

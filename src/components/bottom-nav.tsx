@@ -7,14 +7,15 @@ import {
   CalendarIcon,
   CalendarRangeIcon,
   NotebookPenIcon,
+  PiggyBankIcon,
   ReceiptIcon,
 } from "lucide-react";
 import { cn } from "cn";
 import { encodeMonthParam } from "@/lib/date-range";
 
-function currentMonthHref() {
+function currentMonthHref(base: string) {
   const now = new Date();
-  return `/monthly/${encodeMonthParam(now.getFullYear(), now.getMonth())}`;
+  return `${base}/${encodeMonthParam(now.getFullYear(), now.getMonth())}`;
 }
 
 const NAV_ITEMS = [
@@ -32,10 +33,16 @@ const NAV_ITEMS = [
     match: (path: string) => path.startsWith("/weekly"),
   },
   {
-    href: currentMonthHref(),
+    href: currentMonthHref("/monthly"),
     label: "월말정산",
     icon: ReceiptIcon,
     match: (path: string) => path.startsWith("/monthly"),
+  },
+  {
+    href: currentMonthHref("/budget-plan"),
+    label: "예산계획",
+    icon: PiggyBankIcon,
+    match: (path: string) => path.startsWith("/budget-plan"),
   },
   {
     href: "/stats",

@@ -10,6 +10,13 @@ export interface ParsedImportItem {
   memo: string | null;
 }
 
+export interface ParsedImport {
+  items: ParsedImportItem[];
+  /** 분류명 목록(P/R열). 이번 달 거래가 없어 금액이 0인 분류도 포함되므로, item에 없어도 카테고리는 생성해야 함. */
+  incomeCategories: string[];
+  expenseCategories: string[];
+}
+
 function excelDateToKey(value: unknown): string | null {
   // SheetJS's `cellDates` builds Date objects with the local `new Date(y, m, d)`
   // constructor (not `Date.UTC`), so the calendar date must be read back with
@@ -27,41 +34,83 @@ function toText(value: unknown): string {
   return typeof value === "string" ? value.trim() : String(value ?? "").trim();
 }
 
+// 월간 리포트 엑셀의 열 인덱스(0-based). A=0, B=1, ... 양식이 바뀌면 이 값들만 수정하면 됨.
+const COL = {
+  incomeDate: 0, // A
+  incomeCategory: 1, // B
+  incomeMemo: 2, // C
+  incomeAmount: 3, // D
+  expenseDate: 5, // F
+  expenseCategory: 6, // G
+  expenseMemo: 7, // H
+  expenseAmount: 8, // I
+  incomeCategoryList: 15, // P: 이번 달 수입 분류명 목록(합계 0 포함, Q열 합계는 무시)
+  expenseCategoryList: 17, // R: 이번 달 지출 분류명 목록(합계 0 포함, S열 합계는 무시)
+} as const;
+
+function findHeaderRowIndex(rows: unknown[][]): number {
+  const idx = rows.findIndex(
+    (row) => toText(row[COL.incomeDate]) === "날짜" && toText(row[COL.expenseDate]) === "날짜"
+  );
+  if (idx === -1) throw new Error("헤더 행을 찾을 수 없습니다");
+  return idx;
+}
+
 /**
- * 일일정산 엑셀 업로드 양식: 1행 헤더, 2행부터 데이터.
- * A~C = 수입(날짜/금액/카테고리), D~G = 지출(날짜/카테고리/금액/메모), I열은 E열 드롭다운용 목록이라 무시.
- * 양식이 바뀌면 이 함수의 컬럼 인덱스만 수정하면 됨.
+ * 일일정산 엑셀 업로드 양식: "월간 리포트" 형식.
+ * - 거래 데이터: A~D = 수입(날짜/분류/내용/금액), F~I = 지출(날짜/분류/내용/금액). 날짜 열이 "날짜"인 행 다음부터 데이터 시작.
+ * - 분류명 목록: P = 수입 분류 전체, R = 지출 분류 전체 (헤더 행부터 바로 시작, 그 달 거래가 없어 금액이 0인 분류도 포함됨). Q/S열의 합계 숫자는 사용하지 않음.
+ * - 양식이 바뀌면 이 파일의 COL 매핑만 수정하면 됨.
  */
-export async function parseImportFile(file: File): Promise<ParsedImportItem[]> {
+export async function parseImportFile(file: File): Promise<ParsedImport> {
   const buffer = await file.arrayBuffer();
   const workbook = XLSX.read(new Uint8Array(buffer), { type: "array", cellDates: true });
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
   const rows = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1 });
 
-  const items: ParsedImportItem[] = [];
-  for (const row of rows.slice(1)) {
-    const [incomeDate, incomeAmount, incomeCategory, expenseDate, expenseCategory, expenseAmount, expenseMemo] =
-      row;
+  const headerRow = findHeaderRowIndex(rows);
 
-    const incDate = excelDateToKey(incomeDate);
-    const incAmount = toAmount(incomeAmount);
-    const incCategory = toText(incomeCategory);
+  const incomeCategories = new Set<string>();
+  const expenseCategories = new Set<string>();
+  for (let i = headerRow; i < rows.length; i++) {
+    const incomeCategory = toText(rows[i]?.[COL.incomeCategoryList]);
+    if (incomeCategory) incomeCategories.add(incomeCategory);
+    const expenseCategory = toText(rows[i]?.[COL.expenseCategoryList]);
+    if (expenseCategory) expenseCategories.add(expenseCategory);
+  }
+
+  const items: ParsedImportItem[] = [];
+  for (const row of rows.slice(headerRow + 1)) {
+    const incDate = excelDateToKey(row[COL.incomeDate]);
+    const incAmount = toAmount(row[COL.incomeAmount]);
+    const incCategory = toText(row[COL.incomeCategory]);
     if (incDate && incAmount && incCategory) {
-      items.push({ type: "income", date: incDate, categoryName: incCategory, amount: incAmount, memo: null });
+      items.push({
+        type: "income",
+        date: incDate,
+        categoryName: incCategory,
+        amount: incAmount,
+        memo: toText(row[COL.incomeMemo]) || null,
+      });
     }
 
-    const expDate = excelDateToKey(expenseDate);
-    const expAmount = toAmount(expenseAmount);
-    const expCategory = toText(expenseCategory);
+    const expDate = excelDateToKey(row[COL.expenseDate]);
+    const expAmount = toAmount(row[COL.expenseAmount]);
+    const expCategory = toText(row[COL.expenseCategory]);
     if (expDate && expAmount && expCategory) {
       items.push({
         type: "expense",
         date: expDate,
         categoryName: expCategory,
         amount: expAmount,
-        memo: toText(expenseMemo) || null,
+        memo: toText(row[COL.expenseMemo]) || null,
       });
     }
   }
-  return items;
+
+  return {
+    items,
+    incomeCategories: Array.from(incomeCategories),
+    expenseCategories: Array.from(expenseCategories),
+  };
 }

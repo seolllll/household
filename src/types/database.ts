@@ -8,6 +8,8 @@ export type Category = {
   color: string | null;
   sort_order: number;
   is_active: boolean;
+  /** 변동지출 표에서 여러 카테고리를 하나의 소계로 묶을 때 쓰는 그룹명. 비어 있으면 카테고리 이름 자체가 그룹명. */
+  report_group: string | null;
   created_at: string;
 };
 
@@ -26,7 +28,11 @@ export type Budget = {
   id: string;
   category_id: string;
   month: string;
+  /** 카테고리 전체 예산이면 ''. "고정지출"처럼 카테고리 안에서 세부항목별로 예산을 나눌 때만 항목명(예: "계비"). */
+  label: string;
   amount: number;
+  reason: string | null;
+  feedback: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -37,6 +43,34 @@ export type MonthlyBudget = {
   amount: number;
   created_at: string;
   updated_at: string;
+};
+
+export type WeeklyBudgetItem = {
+  id: string;
+  week_start: string;
+  category_id: string;
+  amount: number;
+  memo: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type AssetItem = {
+  id: string;
+  group_name: string;
+  subgroup: string;
+  label: string;
+  sort_order: number;
+  is_active: boolean;
+};
+
+export type AssetSnapshot = {
+  id: string;
+  asset_item_id: string;
+  month: string;
+  amount: number;
+  reason: string | null;
+  feedback: string | null;
 };
 
 export type Database = {
@@ -85,6 +119,40 @@ export type Database = {
         Insert: Partial<MonthlyBudget> & Pick<MonthlyBudget, "month" | "amount">;
         Update: Partial<MonthlyBudget>;
         Relationships: [];
+      };
+      weekly_budget_items: {
+        Row: WeeklyBudgetItem;
+        Insert: Partial<WeeklyBudgetItem> & Pick<WeeklyBudgetItem, "week_start" | "category_id" | "amount">;
+        Update: Partial<WeeklyBudgetItem>;
+        Relationships: [
+          {
+            foreignKeyName: "weekly_budget_items_category_id_fkey";
+            columns: ["category_id"];
+            isOneToOne: false;
+            referencedRelation: "categories";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      asset_items: {
+        Row: AssetItem;
+        Insert: Partial<AssetItem> & Pick<AssetItem, "group_name" | "subgroup" | "label">;
+        Update: Partial<AssetItem>;
+        Relationships: [];
+      };
+      asset_snapshots: {
+        Row: AssetSnapshot;
+        Insert: Partial<AssetSnapshot> & Pick<AssetSnapshot, "asset_item_id" | "month" | "amount">;
+        Update: Partial<AssetSnapshot>;
+        Relationships: [
+          {
+            foreignKeyName: "asset_snapshots_asset_item_id_fkey";
+            columns: ["asset_item_id"];
+            isOneToOne: false;
+            referencedRelation: "asset_items";
+            referencedColumns: ["id"];
+          },
+        ];
       };
     };
     Views: Record<string, never>;

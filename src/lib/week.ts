@@ -1,4 +1,12 @@
 import { toDateKey } from "@/lib/date-range";
+import type { TransactionWithCategory } from "@/lib/queries";
+
+// 주간정산은 매주 변동이 없는 고정 지출 성격의 분류를 예산 계산에서 제외한다.
+const WEEKLY_EXCLUDED_EXPENSE_CATEGORIES = new Set(["고정지출", "특별비1", "특별비2(여행비)"]);
+
+export function isWeeklyBudgetExpense(t: TransactionWithCategory): boolean {
+  return t.type === "expense" && !WEEKLY_EXCLUDED_EXPENSE_CATEGORIES.has(t.category?.name ?? "");
+}
 
 export interface MonthWeek {
   weekNumber: number;

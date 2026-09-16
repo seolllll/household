@@ -22,6 +22,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { QuickAddModal } from "@/components/quick-add-modal";
+import { SummaryCards } from "@/components/summary-cards";
 import {
   createCategory,
   createTransaction,
@@ -30,6 +31,7 @@ import {
   fetchTransactions,
   type TransactionWithCategory,
 } from "@/lib/queries";
+import type { TransactionType } from "@/types/database";
 import { parseImportFile } from "@/lib/import-excel";
 import { formatCurrency, formatDateWithWeekday } from "@/lib/format";
 import { getMonthRange } from "@/lib/date-range";
@@ -60,6 +62,15 @@ export default function DailySettlementPage() {
       cancelled = true;
     };
   }, [year, month, refreshKey]);
+
+  const income = useMemo(
+    () => transactions.filter((t) => t.type === "income").reduce((sum, t) => sum + t.amount, 0),
+    [transactions]
+  );
+  const expense = useMemo(
+    () => transactions.filter((t) => t.type === "expense").reduce((sum, t) => sum + t.amount, 0),
+    [transactions]
+  );
 
   const groups = useMemo(() => {
     const map = new Map<string, TransactionWithCategory[]>();
@@ -102,7 +113,7 @@ export default function DailySettlementPage() {
     setImporting(true);
     setImportStatus(null);
     try {
-      const items = await parseImportFile(file);
+      const parsed = await parseImportFile(file);
       const [incomeCategories, expenseCategories] = await Promise.all([
         fetchCategories("income"),
         fetchCategories("expense"),
@@ -111,16 +122,25 @@ export default function DailySettlementPage() {
       for (const c of incomeCategories) categoryIdByKey.set(`income:${c.name}`, c.id);
       for (const c of expenseCategories) categoryIdByKey.set(`expense:${c.name}`, c.id);
 
+      async function ensureCategoryId(type: TransactionType, name: string) {
+        const key = `${type}:${name}`;
+        let id = categoryIdByKey.get(key);
+        if (!id) {
+          id = await createCategory(name, type);
+          categoryIdByKey.set(key, id);
+        }
+        return id;
+      }
+
+      // 이번 달 거래가 없어 금액이 0인 분류도 목록에 있으면 미리 생성해둔다.
+      for (const name of parsed.incomeCategories) await ensureCategoryId("income", name);
+      for (const name of parsed.expenseCategories) await ensureCategoryId("expense", name);
+
       let added = 0;
       let skipped = 0;
-      for (const item of items) {
-        const key = `${item.type}:${item.categoryName}`;
+      for (const item of parsed.items) {
         try {
-          let categoryId = categoryIdByKey.get(key);
-          if (!categoryId) {
-            categoryId = await createCategory(item.categoryName, item.type);
-            categoryIdByKey.set(key, categoryId);
-          }
+          const categoryId = await ensureCategoryId(item.type, item.categoryName);
           await createTransaction({
             type: item.type,
             amount: item.amount,
@@ -135,7 +155,7 @@ export default function DailySettlementPage() {
       }
 
       setImportStatus(
-        items.length === 0
+        parsed.items.length === 0
           ? "가져올 내역이 없습니다"
           : skipped > 0
             ? `${added}건 추가됨, ${skipped}건 실패`
@@ -182,6 +202,8 @@ export default function DailySettlementPage() {
           onChange={handleFileSelected}
         />
       </div>
+
+      <SummaryCards income={income} expense={expense} />
 
       {groups.length === 0 ? (
         <p className="text-sm text-muted-foreground lg:text-base">거래 내역이 없습니다</p>
