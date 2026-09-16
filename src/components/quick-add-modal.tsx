@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import {
   Dialog,
@@ -25,6 +25,7 @@ import {
   createCategory,
   createTransaction,
   deleteCategory,
+  fetchBudgetLabels,
   fetchCategories,
   fetchRecentCategoryIds,
   updateCategory,
@@ -32,7 +33,8 @@ import {
   type TransactionWithCategory,
 } from "@/lib/queries";
 import { toDateKey } from "@/lib/date-range";
-import type { Category, TransactionType } from "@/types/database";
+import { FIXED_EXPENSE_GROUP } from "@/lib/budget-rows";
+import type { BudgetLabel, Category, TransactionType } from "@/types/database";
 
 interface QuickAddModalProps {
   open: boolean;
@@ -58,6 +60,7 @@ export function QuickAddModal({
 }: QuickAddModalProps) {
   const [type, setType] = useState<TransactionType>(transaction?.type ?? "expense");
   const [categories, setCategories] = useState<Category[]>([]);
+  const [budgetLabels, setBudgetLabels] = useState<BudgetLabel[]>([]);
   const [categoryId, setCategoryId] = useState<string | null>(transaction?.category_id ?? null);
   const [amount, setAmount] = useState(transaction ? String(transaction.amount) : "");
   const [date, setDate] = useState(() => transaction?.date ?? toDateKey(new Date()));
@@ -78,6 +81,11 @@ export function QuickAddModal({
     setCategoryId((current) =>
       current && cats.some((c) => c.id === current) ? current : null
     );
+
+    const fixedCategoryIds = cats
+      .filter((c) => c.report_group === FIXED_EXPENSE_GROUP)
+      .map((c) => c.id);
+    setBudgetLabels(fixedCategoryIds.length > 0 ? await fetchBudgetLabels(fixedCategoryIds) : []);
   }
 
   useEffect(() => {
@@ -138,6 +146,16 @@ export function QuickAddModal({
 
   const amountValue = Number(amount);
   const isValid = amountValue > 0 && Boolean(categoryId) && Boolean(date);
+
+  const selectedCategory = categories.find((c) => c.id === categoryId) ?? null;
+  const selectedCategoryLabels =
+    selectedCategory?.report_group === FIXED_EXPENSE_GROUP
+      ? budgetLabels.filter((l) => l.category_id === selectedCategory.id)
+      : [];
+
+  function toggleMemoLabel(name: string) {
+    setMemo((m) => (m.trim() === name ? "" : name));
+  }
 
   async function handleSave() {
     if (!isValid || !categoryId) return;
@@ -303,21 +321,41 @@ export function QuickAddModal({
                   <span className="sr-only">카테고리 관리</span>
                 </Button>
               </div>
-              <div className="flex flex-wrap gap-1.5">
+              <div className="flex flex-wrap items-start gap-1.5">
                 {categories.map((c) => (
-                  <button
-                    key={c.id}
-                    type="button"
-                    onClick={() => setCategoryId(c.id)}
-                    className={cn(
-                      "rounded-lg border px-2.5 py-1 text-sm transition-colors",
-                      categoryId === c.id
-                        ? "border-transparent bg-primary text-primary-foreground"
-                        : "border-border bg-background text-foreground hover:bg-muted"
+                  <Fragment key={c.id}>
+                    <button
+                      type="button"
+                      onClick={() => setCategoryId(c.id)}
+                      className={cn(
+                        "rounded-lg border px-2.5 py-1 text-sm transition-colors",
+                        categoryId === c.id
+                          ? "border-transparent bg-primary text-primary-foreground"
+                          : "border-border bg-background text-foreground hover:bg-muted"
+                      )}
+                    >
+                      {c.name}
+                    </button>
+                    {c.id === categoryId && selectedCategoryLabels.length > 0 && (
+                      <div className="flex w-full flex-wrap gap-1.5 pl-3">
+                        {selectedCategoryLabels.map((l) => (
+                          <button
+                            key={l.id}
+                            type="button"
+                            onClick={() => toggleMemoLabel(l.name)}
+                            className={cn(
+                              "rounded-lg border px-2 py-0.5 text-xs transition-colors",
+                              memo.trim() === l.name
+                                ? "border-transparent bg-primary text-primary-foreground"
+                                : "border-border bg-background text-muted-foreground hover:bg-muted"
+                            )}
+                          >
+                            {l.name}
+                          </button>
+                        ))}
+                      </div>
                     )}
-                  >
-                    {c.name}
-                  </button>
+                  </Fragment>
                 ))}
                 {categories.length === 0 && (
                   <p className="text-sm text-muted-foreground">등록된 카테고리가 없습니다</p>

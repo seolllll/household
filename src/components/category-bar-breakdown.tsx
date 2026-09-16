@@ -1,3 +1,4 @@
+import { cn } from "cn";
 import { formatCurrency } from "@/lib/format";
 
 export interface CategoryBarItem {
@@ -5,6 +6,7 @@ export interface CategoryBarItem {
   name: string;
   color: string;
   amount: number;
+  budget: number;
 }
 
 interface CategoryBarBreakdownProps {
@@ -28,8 +30,13 @@ export function CategoryBarBreakdown({ items }: CategoryBarBreakdownProps) {
           <li key={item.id} className="flex flex-col gap-1">
             <div className="flex items-center justify-between text-xs lg:text-sm">
               <span>{item.name}</span>
-              <span className="tabular-nums text-muted-foreground">
-                {formatCurrency(item.amount)}
+              <span
+                className={cn(
+                  "tabular-nums",
+                  item.amount > item.budget ? "text-expense" : "text-income"
+                )}
+              >
+                예산 {formatCurrency(item.budget)} / 지출 {formatCurrency(item.amount)}
               </span>
             </div>
             <div className="h-2 w-full overflow-hidden rounded-full bg-muted lg:h-2.5">

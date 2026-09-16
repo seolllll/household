@@ -1,10 +1,8 @@
 import type { BudgetReviewRow } from "@/components/budget-review-table";
 import type { BudgetWithCategory, TransactionWithCategory } from "@/lib/queries";
-import type { Category } from "@/types/database";
+import type { BudgetLabel, Category } from "@/types/database";
 
 export const FIXED_EXPENSE_GROUP = "고정지출";
-// "고정지출" 카테고리 하나에 여러 고정비가 메모로만 구분돼 있어서, 수입처럼 항목별로 보여주기 위한 세부항목 목록.
-export const FIXED_EXPENSE_LABELS = ["계비", "어린이보험", "통신비", "실비보험", "주담대원리금"];
 export const FIXED_EXPENSE_OTHER_LABEL = "기타";
 
 export function buildRows(
@@ -31,20 +29,23 @@ export function buildRows(
 export function buildFixedExpenseLabelRows(
   categories: Category[],
   categoryTransactions: TransactionWithCategory[],
-  budgetList: BudgetWithCategory[]
+  budgetList: BudgetWithCategory[],
+  labels: BudgetLabel[]
 ): BudgetReviewRow[] {
   return categories.flatMap((category) => {
     const txForCategory = categoryTransactions.filter((t) => t.category?.id === category.id);
     const budgetByLabel = new Map(
       budgetList.filter((b) => b.category_id === category.id).map((b) => [b.label, b])
     );
-    const labelRows = FIXED_EXPENSE_LABELS.map((label) => ({
+    const categoryLabels = labels.filter((l) => l.category_id === category.id);
+    const labelRows: BudgetReviewRow[] = categoryLabels.map((l) => ({
       category,
-      label,
+      label: l.name,
+      labelId: l.id,
       actual: txForCategory
-        .filter((t) => (t.memo ?? "") === label)
+        .filter((t) => (t.memo ?? "") === l.name)
         .reduce((sum, t) => sum + t.amount, 0),
-      budget: budgetByLabel.get(label),
+      budget: budgetByLabel.get(l.name),
     }));
     const matchedAmount = labelRows.reduce((sum, r) => sum + r.actual, 0);
     const totalAmount = txForCategory.reduce((sum, t) => sum + t.amount, 0);

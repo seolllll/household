@@ -3,10 +3,12 @@ import type {
   AssetItem,
   AssetSnapshot,
   Budget,
+  BudgetLabel,
   Category,
   MonthlyBudget,
   Transaction,
   TransactionType,
+  VariableBudgetItem,
   WeeklyBudgetItem,
 } from "@/types/database";
 import type { DateRange } from "@/lib/date-range";
@@ -197,6 +199,54 @@ export async function deleteWeeklyBudgetItem(id: string): Promise<void> {
   if (error) throw error;
 }
 
+export async function fetchBudgetLabels(categoryIds: string[]): Promise<BudgetLabel[]> {
+  if (categoryIds.length === 0) return [];
+  const { data, error } = await supabase
+    .from("budget_labels")
+    .select("*")
+    .in("category_id", categoryIds)
+    .order("sort_order", { ascending: true });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function createBudgetLabel(categoryId: string, name: string): Promise<void> {
+  const { data: last, error: findError } = await supabase
+    .from("budget_labels")
+    .select("sort_order")
+    .eq("category_id", categoryId)
+    .order("sort_order", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (findError) throw findError;
+  const { error } = await supabase
+    .from("budget_labels")
+    .insert({ category_id: categoryId, name, sort_order: (last?.sort_order ?? -1) + 1 });
+  if (error) throw error;
+}
+
+export async function renameBudgetLabel(
+  id: string,
+  categoryId: string,
+  oldName: string,
+  newName: string
+): Promise<void> {
+  const { error } = await supabase.from("budget_labels").update({ name: newName }).eq("id", id);
+  if (error) throw error;
+  // 이 세부항목으로 이미 저장된 과거 예산 기록도 새 이름을 따라가도록 함께 갱신.
+  const { error: budgetsError } = await supabase
+    .from("budgets")
+    .update({ label: newName })
+    .eq("category_id", categoryId)
+    .eq("label", oldName);
+  if (budgetsError) throw budgetsError;
+}
+
+export async function deleteBudgetLabel(id: string): Promise<void> {
+  const { error } = await supabase.from("budget_labels").delete().eq("id", id);
+  if (error) throw error;
+}
+
 export async function fetchBudgets(month: string): Promise<BudgetWithCategory[]> {
   const { data, error } = await supabase
     .from("budgets")
@@ -221,6 +271,71 @@ export async function upsertBudget(
       { onConflict: "category_id,month,label" }
     );
   if (error) throw error;
+}
+
+export type VariableBudgetItemWithCategory = VariableBudgetItem & { category: Category | null };
+
+export async function fetchVariableBudgetItems(month: string): Promise<VariableBudgetItemWithCategory[]> {
+  const { data, error } = await supabase
+    .from("variable_budget_items")
+    .select("*, category:categories(*)")
+    .eq("month", month);
+  if (error) throw error;
+  return (data ?? []) as unknown as VariableBudgetItemWithCategory[];
+}
+
+export interface VariableBudgetItemInput {
+  month: string;
+  category_id: string;
+  amount: number;
+  memo: string | null;
+}
+
+/** 변동지출 계획 항목의 카테고리별 합계를 budgets.amount에 동기화(오차원인·피드백은 기존 값 유지). 월말정산의 예산 숫자가 이 목록을 그대로 따라가게 하기 위함. */
+async function syncVariableCategoryBudget(categoryId: string, month: string): Promise<void> {
+  const { data: items, error: itemsError } = await supabase
+    .from("variable_budget_items")
+    .select("amount")
+    .eq("category_id", categoryId)
+    .eq("month", month);
+  if (itemsError) throw itemsError;
+  const total = (items ?? []).reduce((sum, it) => sum + it.amount, 0);
+
+  const { data: existing, error: findError } = await supabase
+    .from("budgets")
+    .select("reason, feedback")
+    .eq("category_id", categoryId)
+    .eq("month", month)
+    .eq("label", "")
+    .maybeSingle();
+  if (findError) throw findError;
+
+  await upsertBudget(categoryId, month, "", total, existing?.reason ?? null, existing?.feedback ?? null);
+}
+
+export async function createVariableBudgetItem(input: VariableBudgetItemInput): Promise<void> {
+  const { error } = await supabase.from("variable_budget_items").insert(input);
+  if (error) throw error;
+  await syncVariableCategoryBudget(input.category_id, input.month);
+}
+
+export async function updateVariableBudgetItem(
+  id: string,
+  input: VariableBudgetItemInput,
+  previousCategoryId?: string
+): Promise<void> {
+  const { error } = await supabase.from("variable_budget_items").update(input).eq("id", id);
+  if (error) throw error;
+  await syncVariableCategoryBudget(input.category_id, input.month);
+  if (previousCategoryId && previousCategoryId !== input.category_id) {
+    await syncVariableCategoryBudget(previousCategoryId, input.month);
+  }
+}
+
+export async function deleteVariableBudgetItem(id: string, categoryId: string, month: string): Promise<void> {
+  const { error } = await supabase.from("variable_budget_items").delete().eq("id", id);
+  if (error) throw error;
+  await syncVariableCategoryBudget(categoryId, month);
 }
 
 export async function fetchAssetItems(): Promise<AssetItem[]> {

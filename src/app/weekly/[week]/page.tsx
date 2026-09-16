@@ -19,7 +19,9 @@ import { decodeWeekParam, encodeWeekParam, getMonthWeeks, isWeeklyBudgetExpense 
 import {
   fetchMonthlyBudget,
   fetchTransactions,
+  fetchWeeklyBudgetItems,
   type TransactionWithCategory,
+  type WeeklyBudgetItemWithCategory,
 } from "@/lib/queries";
 
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
@@ -67,6 +69,7 @@ export default function WeeklyDetailPage({
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [budgetAmount, setBudgetAmount] = useState(0);
   const [cumulativeExpense, setCumulativeExpense] = useState(0);
+  const [weeklyBudgetItems, setWeeklyBudgetItems] = useState<WeeklyBudgetItemWithCategory[]>([]);
 
   // Reset the selected day whenever the viewed week changes (prev/next navigation).
   const [prevWeekKey, setPrevWeekKey] = useState<string | null>(null);
@@ -85,13 +88,15 @@ export default function WeeklyDetailPage({
       fetchTransactions({ from: weekInfo.from, to: weekInfo.to }),
       fetchTransactions({ from: monthRange.from, to: weekInfo.to }),
       fetchMonthlyBudget(monthKey),
-    ]).then(([weekTx, cumulativeTx, budget]) => {
+      fetchWeeklyBudgetItems({ from: weekInfo.from, to: weekInfo.to }),
+    ]).then(([weekTx, cumulativeTx, budget, weeklyBudgetItemRows]) => {
       if (cancelled) return;
       setTransactions(weekTx);
       setCumulativeExpense(
         cumulativeTx.filter(isWeeklyBudgetExpense).reduce((sum, t) => sum + t.amount, 0)
       );
       setBudgetAmount(budget?.amount ?? 0);
+      setWeeklyBudgetItems(weeklyBudgetItemRows);
     });
     return () => {
       cancelled = true;
@@ -109,6 +114,14 @@ export default function WeeklyDetailPage({
   }, [weekInfo, transactions]);
 
   const categoryItems = useMemo<CategoryBarItem[]>(() => {
+    const budgetByCategory = new Map<string, number>();
+    for (const item of weeklyBudgetItems) {
+      budgetByCategory.set(
+        item.category_id,
+        (budgetByCategory.get(item.category_id) ?? 0) + item.amount
+      );
+    }
+
     const map = new Map<string, CategoryBarItem>();
     for (const t of transactions) {
       if (!isWeeklyBudgetExpense(t) || !t.category) continue;
@@ -120,10 +133,11 @@ export default function WeeklyDetailPage({
           name: t.category.name,
           color: t.category.color ?? "#888780",
           amount: t.amount,
+          budget: budgetByCategory.get(t.category.id) ?? 0,
         });
     }
     return Array.from(map.values());
-  }, [transactions]);
+  }, [transactions, weeklyBudgetItems]);
 
   const income = transactions
     .filter((t) => t.type === "income")

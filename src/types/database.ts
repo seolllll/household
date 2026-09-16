@@ -55,6 +55,26 @@ export type WeeklyBudgetItem = {
   updated_at: string;
 };
 
+/** "고정지출"처럼 카테고리 하나 안에서 예산/실제를 세부항목별로 쪼개 보여줄 때 쓰는 항목 목록. */
+export type BudgetLabel = {
+  id: string;
+  category_id: string;
+  name: string;
+  sort_order: number;
+  created_at: string;
+};
+
+/** 변동지출 계획을 카테고리 안에서 항목 단위(예: "커피")로 쪼개 입력하는 목록. 카테고리별 합계가 budgets.amount에 자동 반영됨. */
+export type VariableBudgetItem = {
+  id: string;
+  month: string;
+  category_id: string;
+  amount: number;
+  memo: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type AssetItem = {
   id: string;
   group_name: string;
@@ -127,6 +147,34 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "weekly_budget_items_category_id_fkey";
+            columns: ["category_id"];
+            isOneToOne: false;
+            referencedRelation: "categories";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      budget_labels: {
+        Row: BudgetLabel;
+        Insert: Partial<BudgetLabel> & Pick<BudgetLabel, "category_id" | "name">;
+        Update: Partial<BudgetLabel>;
+        Relationships: [
+          {
+            foreignKeyName: "budget_labels_category_id_fkey";
+            columns: ["category_id"];
+            isOneToOne: false;
+            referencedRelation: "categories";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      variable_budget_items: {
+        Row: VariableBudgetItem;
+        Insert: Partial<VariableBudgetItem> & Pick<VariableBudgetItem, "month" | "category_id" | "amount">;
+        Update: Partial<VariableBudgetItem>;
+        Relationships: [
+          {
+            foreignKeyName: "variable_budget_items_category_id_fkey";
             columns: ["category_id"];
             isOneToOne: false;
             referencedRelation: "categories";

@@ -15,6 +15,7 @@ import { buildFixedExpenseLabelRows, buildRows, FIXED_EXPENSE_GROUP } from "@/li
 import {
   fetchAssetItems,
   fetchAssetSnapshots,
+  fetchBudgetLabels,
   fetchBudgets,
   fetchCategories,
   fetchMonthlyBudget,
@@ -22,7 +23,7 @@ import {
   type BudgetWithCategory,
   type TransactionWithCategory,
 } from "@/lib/queries";
-import type { AssetItem, AssetSnapshot, Category } from "@/types/database";
+import type { AssetItem, AssetSnapshot, BudgetLabel, Category } from "@/types/database";
 
 export default function MonthlyPage({ params }: { params: Promise<{ month: string }> }) {
   const { month: monthParam } = use(params);
@@ -36,6 +37,7 @@ export default function MonthlyPage({ params }: { params: Promise<{ month: strin
   const [assetItems, setAssetItems] = useState<AssetItem[]>([]);
   const [assetSnapshots, setAssetSnapshots] = useState<AssetSnapshot[]>([]);
   const [prevAssetSnapshots, setPrevAssetSnapshots] = useState<AssetSnapshot[]>([]);
+  const [budgetLabels, setBudgetLabels] = useState<BudgetLabel[]>([]);
   const [refreshKey, setRefreshKey] = useState(0);
 
   const monthKey = parsed ? getMonthRange(parsed.year, parsed.month).from : null;
@@ -58,7 +60,7 @@ export default function MonthlyPage({ params }: { params: Promise<{ month: strin
       fetchAssetSnapshots(monthKey),
       fetchAssetSnapshots(prevMonthKey),
     ]).then(
-      ([
+      async ([
         tx,
         monthlyBudget,
         incomeCats,
@@ -69,6 +71,11 @@ export default function MonthlyPage({ params }: { params: Promise<{ month: strin
         prevAssetSnapshotRows,
       ]) => {
         if (cancelled) return;
+        const fixedCategoryIds = expenseCats
+          .filter((c) => c.report_group === FIXED_EXPENSE_GROUP)
+          .map((c) => c.id);
+        const labelRows = await fetchBudgetLabels(fixedCategoryIds);
+        if (cancelled) return;
         setTransactions(tx);
         setBudgetAmount(monthlyBudget?.amount ?? 0);
         setIncomeCategories(incomeCats);
@@ -77,6 +84,7 @@ export default function MonthlyPage({ params }: { params: Promise<{ month: strin
         setAssetItems(assetItemRows);
         setAssetSnapshots(assetSnapshotRows);
         setPrevAssetSnapshots(prevAssetSnapshotRows);
+        setBudgetLabels(labelRows);
       }
     );
 
@@ -97,7 +105,7 @@ export default function MonthlyPage({ params }: { params: Promise<{ month: strin
   const variableExpenseCategories = expenseCategories.filter((c) => c.report_group !== FIXED_EXPENSE_GROUP);
 
   const incomeRows = buildRows(incomeCategories, transactions, budgets);
-  const fixedExpenseRows = buildFixedExpenseLabelRows(fixedExpenseCategories, transactions, budgets);
+  const fixedExpenseRows = buildFixedExpenseLabelRows(fixedExpenseCategories, transactions, budgets, budgetLabels);
   const variableExpenseRows = buildRows(variableExpenseCategories, transactions, budgets);
 
   function refresh() {

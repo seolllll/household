@@ -121,8 +121,36 @@
 - BottomNav에 예산계획 탭 추가 (월말정산 다음 순서, `PiggyBankIcon`).
 - 새 테이블 만들 때마다 RLS 때문에 저장이 401로 막히는 문제가 반복됨 → 앞으로 create table SQL을 줄 때 항상 RLS disable/grant(또는 permissive policy) SQL을 같이 준다는 규칙을 메모리에 저장(사용자 명시적 요청).
 
+## 2026-09-17
+
+### 환경
+- `Module not found: Can't resolve 'xlsx'` 오류 확인: 이전 tui-date-picker 때와 동일 원인(`package.json`엔 있지만 `node_modules`에 실제 설치가 누락). `npm install`로 해결.
+
+### 주간정산 - 카테고리별 지출에 예산 비교 추가
+- `/weekly/[week]` 카테고리별 지출 섹션에 그 주 `weekly_budget_items`(예산계획 탭 입력) 카테고리별 합계를 "예산 X / 지출 Y" 형식으로 함께 표시. 지출이 예산 초과면 빨간색(`text-expense`), 이하면 초록색(`text-income`).
+- `CategoryBarBreakdown`의 `CategoryBarItem`에 `budget` 필드 추가.
+
+### 예산계획 탭 - 수입계획/고정지출계획에 추가·수정·삭제 기능
+- 수입계획: 헤더 + 버튼으로 새 카테고리 추가, 행을 펼치면 예산명 수정 + 삭제 가능. 실제 `categories` 테이블과 연동되어 앱 전체(카테고리 선택 등)에 그대로 반영됨 — 사용자 요청으로 화면에 안내 문구 표시.
+- 고정지출계획: 코드에 하드코딩돼 있던 5개 세부항목(계비/어린이보험/통신비/실비보험/주담대원리금)을 신규 `budget_labels` 테이블로 옮겨 완전히 관리 가능하게 만듦(추가/이름수정/삭제). 이름 변경 시 그 라벨로 저장된 과거 `budgets.label` 기록도 새 이름으로 함께 갱신(연결 끊김 방지).
+- `BudgetReviewTable`에 `manage` prop(onRename/onDelete) 추가. 월말정산은 별도 컴포넌트(`BudgetExcelTable`/`BudgetGroupedExcelTable`)라 영향 없음.
+- 이름 수정용 별도 "수정" 버튼 제거 — 하단 "저장" 버튼 클릭 시 예산 금액과 함께 한 번에 저장. "삭제" 버튼은 "저장" 버튼 옆으로 위치 이동.
+- 새 `budget_labels` 테이블도 RLS 정책(anon 허용) 함께 안내.
+
+### 지출/수입 추가·수정 모달 - 고정지출 세부항목(2뎁스) 선택
+- `QuickAddModal`에서 카테고리로 "고정지출"(`report_group` 기준)을 선택하면 그 카테고리 칩 바로 아래 줄에 저장된 세부항목(`budget_labels`) 칩 목록이 나타남(선택된 카테고리 칩 뒤에 `w-full` 블록을 끼워 넣어 flex-wrap이 강제 줄바꿈되도록 처리). 클릭하면 메모 필드에 그 이름이 채워짐(다시 클릭 시 해제) — 메모와 세부항목명이 일치해야 월말정산·예산계획 집계에 매칭되는 기존 규칙을 그대로 활용.
+- 2뎁스 선택은 완전히 선택사항(카테고리만 선택해도 저장 가능). 수정 모드에서는 기존 메모가 세부항목명과 일치하면 자동으로 칩이 선택 표시됨.
+
+### 예산계획 탭 - 변동지출계획을 항목 리스트로 전면 개편
+- 기존 카테고리별 단일 예산 입력(`BudgetReviewTable`)을 주간별 예산과 같은 add-modal 방식으로 교체. 신규 `variable_budget_items` 테이블(month, category_id, amount, memo) + `VariableBudgetItemModal`/`VariableBudgetItemList` 컴포넌트 추가.
+- 표시 형식: 카테고리(분류)별로 묶어서 개별 항목을 나열하고 그 아래 "OO 총계"를 항목 개수와 무관하게 항상 표시, 목록 맨 아래엔 전체 총계. 총계 줄에도 카테고리 색상 점 표시.
+- 월말정산과의 연동(사용자 확인 후 진행): 항목 추가/수정/삭제 때마다 해당 카테고리의 합계를 `budgets.amount`에 자동 동기화(오차원인·피드백은 기존 값 유지) — 월말정산의 변동지출 "예산" 칸(조회 전용)이 이 목록을 그대로 반영하도록 함.
+
+### 스타일 정리
+- `BudgetReviewTable`의 `tabular-nums`를 라벨 포함 wrapping span이 아니라 숫자 span에 직접 적용하도록 재구성(변동지출계획 리스트와 동일 컨벤션).
+- 수입계획/고정지출계획에서 "예산" 단어 제거(숫자만 표시), 총계 표시도 변동지출계획과 동일한 두 span(`총계` + `tabular-nums` 금액) 구조로 통일.
+
 ## 다음 작업 (예정)
-- [ ] 예산계획 컨텐츠 수정
 - [ ] 고정지출 세부항목 메모 매칭 정리 (거래 메모를 세부항목명과 맞추는 규칙이든, 다른 매칭 방식이든 재검토)
 - [ ] 변동지출 분류 묶음(`categories.report_group`) 값 채우기 — 지금은 전부 비어있어서 카테고리별 단독 표시 상태
 - [ ] 엑셀 다운로드 기능

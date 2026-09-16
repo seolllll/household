@@ -6,23 +6,35 @@ import { ChevronLeftIcon, ChevronRightIcon, PencilIcon, PlusIcon, Trash2Icon } f
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { BudgetReviewTable } from "@/components/budget-review-table";
+import { BudgetReviewTable, type BudgetReviewRow } from "@/components/budget-review-table";
 import { WeeklyBudgetItemModal } from "@/components/weekly-budget-item-modal";
+import { VariableBudgetItemModal } from "@/components/variable-budget-item-modal";
+import { VariableBudgetItemList } from "@/components/variable-budget-item-list";
 import { formatCurrency, formatShortDate } from "@/lib/format";
 import { encodeMonthParam, getMonthRange, parseMonthParam } from "@/lib/date-range";
 import { getMonthWeeks } from "@/lib/week";
 import { buildFixedExpenseLabelRows, buildRows, FIXED_EXPENSE_GROUP } from "@/lib/budget-rows";
 import {
+  createBudgetLabel,
+  createCategory,
+  deleteBudgetLabel,
+  deleteCategory,
+  deleteVariableBudgetItem,
   deleteWeeklyBudgetItem,
+  fetchBudgetLabels,
   fetchBudgets,
   fetchCategories,
   fetchMonthlyBudget,
+  fetchVariableBudgetItems,
   fetchWeeklyBudgetItems,
+  renameBudgetLabel,
+  updateCategory,
   upsertMonthlyBudget,
   type BudgetWithCategory,
+  type VariableBudgetItemWithCategory,
   type WeeklyBudgetItemWithCategory,
 } from "@/lib/queries";
-import type { Category } from "@/types/database";
+import type { BudgetLabel, Category } from "@/types/database";
 
 export default function BudgetPlanPage({ params }: { params: Promise<{ month: string }> }) {
   const { month: monthParam } = use(params);
@@ -31,6 +43,7 @@ export default function BudgetPlanPage({ params }: { params: Promise<{ month: st
   const [incomeCategories, setIncomeCategories] = useState<Category[]>([]);
   const [expenseCategories, setExpenseCategories] = useState<Category[]>([]);
   const [budgets, setBudgets] = useState<BudgetWithCategory[]>([]);
+  const [budgetLabels, setBudgetLabels] = useState<BudgetLabel[]>([]);
   const [livingBudget, setLivingBudget] = useState(0);
   const [weeklyBudgetItems, setWeeklyBudgetItems] = useState<WeeklyBudgetItemWithCategory[]>([]);
   const [editingLiving, setEditingLiving] = useState(false);
@@ -40,6 +53,17 @@ export default function BudgetPlanPage({ params }: { params: Promise<{ month: st
   const [itemModalOpen, setItemModalOpen] = useState(false);
   const [modalWeekStart, setModalWeekStart] = useState<string | null>(null);
   const [editingItem, setEditingItem] = useState<WeeklyBudgetItemWithCategory | null>(null);
+  const [addingIncome, setAddingIncome] = useState(false);
+  const [newIncomeName, setNewIncomeName] = useState("");
+  const [addIncomeError, setAddIncomeError] = useState<string | null>(null);
+  const [addingFixedLabel, setAddingFixedLabel] = useState(false);
+  const [newFixedLabelName, setNewFixedLabelName] = useState("");
+  const [addFixedLabelError, setAddFixedLabelError] = useState<string | null>(null);
+  const [variableBudgetItems, setVariableBudgetItems] = useState<VariableBudgetItemWithCategory[]>([]);
+  const [variableItemModalOpen, setVariableItemModalOpen] = useState(false);
+  const [editingVariableItem, setEditingVariableItem] = useState<VariableBudgetItemWithCategory | null>(
+    null
+  );
 
   const monthKey = parsed ? getMonthRange(parsed.year, parsed.month).from : null;
 
@@ -54,14 +78,31 @@ export default function BudgetPlanPage({ params }: { params: Promise<{ month: st
       fetchBudgets(monthKey),
       fetchMonthlyBudget(monthKey),
       fetchWeeklyBudgetItems(range),
-    ]).then(([incomeCats, expenseCats, budgetRows, monthlyBudget, weeklyBudgetItemRows]) => {
-      if (cancelled) return;
-      setIncomeCategories(incomeCats);
-      setExpenseCategories(expenseCats);
-      setBudgets(budgetRows);
-      setLivingBudget(monthlyBudget?.amount ?? 0);
-      setWeeklyBudgetItems(weeklyBudgetItemRows);
-    });
+      fetchVariableBudgetItems(monthKey),
+    ]).then(
+      async ([
+        incomeCats,
+        expenseCats,
+        budgetRows,
+        monthlyBudget,
+        weeklyBudgetItemRows,
+        variableBudgetItemRows,
+      ]) => {
+        if (cancelled) return;
+        const fixedCategoryIds = expenseCats
+          .filter((c) => c.report_group === FIXED_EXPENSE_GROUP)
+          .map((c) => c.id);
+        const labelRows = await fetchBudgetLabels(fixedCategoryIds);
+        if (cancelled) return;
+        setIncomeCategories(incomeCats);
+        setExpenseCategories(expenseCats);
+        setBudgets(budgetRows);
+        setBudgetLabels(labelRows);
+        setLivingBudget(monthlyBudget?.amount ?? 0);
+        setWeeklyBudgetItems(weeklyBudgetItemRows);
+        setVariableBudgetItems(variableBudgetItemRows);
+      }
+    );
 
     return () => {
       cancelled = true;
@@ -86,8 +127,70 @@ export default function BudgetPlanPage({ params }: { params: Promise<{ month: st
   const variableExpenseCategories = expenseCategories.filter((c) => c.report_group !== FIXED_EXPENSE_GROUP);
 
   const incomeRows = buildRows(incomeCategories, [], budgets);
-  const fixedExpenseRows = buildFixedExpenseLabelRows(fixedExpenseCategories, [], budgets);
-  const variableExpenseRows = buildRows(variableExpenseCategories, [], budgets);
+  const fixedExpenseRows = buildFixedExpenseLabelRows(fixedExpenseCategories, [], budgets, budgetLabels);
+  const variableBudgetTotal = variableBudgetItems.reduce((sum, it) => sum + it.amount, 0);
+
+  async function handleAddIncomeCategory() {
+    const name = newIncomeName.trim();
+    if (!name) return;
+    setAddIncomeError(null);
+    try {
+      await createCategory(name, "income");
+      setNewIncomeName("");
+      setAddingIncome(false);
+      refresh();
+    } catch {
+      setAddIncomeError("카테고리를 추가하지 못했습니다");
+    }
+  }
+
+  async function handleRenameIncomeCategory(row: BudgetReviewRow, name: string) {
+    await updateCategory(row.category.id, name);
+  }
+
+  async function handleDeleteIncomeCategory(row: BudgetReviewRow) {
+    await deleteCategory(row.category.id);
+  }
+
+  async function handleAddFixedLabel() {
+    const name = newFixedLabelName.trim();
+    const targetCategory = fixedExpenseCategories[0];
+    if (!name || !targetCategory) return;
+    setAddFixedLabelError(null);
+    try {
+      await createBudgetLabel(targetCategory.id, name);
+      setNewFixedLabelName("");
+      setAddingFixedLabel(false);
+      refresh();
+    } catch {
+      setAddFixedLabelError("세부항목을 추가하지 못했습니다");
+    }
+  }
+
+  async function handleRenameFixedLabel(row: BudgetReviewRow, name: string) {
+    if (!row.labelId) return;
+    await renameBudgetLabel(row.labelId, row.category.id, row.label ?? "", name);
+  }
+
+  async function handleDeleteFixedLabel(row: BudgetReviewRow) {
+    if (!row.labelId) return;
+    await deleteBudgetLabel(row.labelId);
+  }
+
+  function openAddVariableItemModal() {
+    setEditingVariableItem(null);
+    setVariableItemModalOpen(true);
+  }
+
+  function openEditVariableItemModal(item: VariableBudgetItemWithCategory) {
+    setEditingVariableItem(item);
+    setVariableItemModalOpen(true);
+  }
+
+  async function handleDeleteVariableItem(item: VariableBudgetItemWithCategory) {
+    await deleteVariableBudgetItem(item.id, item.category_id, item.month);
+    refresh();
+  }
 
   const prevLink = (() => {
     const d = new Date(parsed.year, parsed.month - 1, 1);
@@ -277,18 +380,103 @@ export default function BudgetPlanPage({ params }: { params: Promise<{ month: st
       </section>
 
       <section className="flex flex-col gap-2">
-        <h2 className="text-sm font-medium text-muted-foreground lg:text-base">수입 계획</h2>
-        <BudgetReviewTable month={monthKey} rows={incomeRows} showActual={false} onSaved={refresh} />
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-medium text-muted-foreground lg:text-base">수입 계획</h2>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            onClick={() => setAddingIncome((v) => !v)}
+          >
+            <PlusIcon className="size-4" />
+            <span className="sr-only">추가</span>
+          </Button>
+        </div>
+        <p className="text-xs text-muted-foreground lg:text-sm">
+          추가·수정·삭제는 수입 카테고리에도 그대로 반영됩니다.
+        </p>
+        {addingIncome && (
+          <div className="flex items-center gap-1.5">
+            <Input
+              autoFocus
+              placeholder="새 수입 카테고리 이름"
+              value={newIncomeName}
+              onChange={(e) => setNewIncomeName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleAddIncomeCategory();
+              }}
+            />
+            <Button type="button" onClick={handleAddIncomeCategory}>
+              추가
+            </Button>
+          </div>
+        )}
+        {addIncomeError && <p className="text-sm text-expense">{addIncomeError}</p>}
+        <BudgetReviewTable
+          month={monthKey}
+          rows={incomeRows}
+          showActual={false}
+          onSaved={refresh}
+          manage={{ onRename: handleRenameIncomeCategory, onDelete: handleDeleteIncomeCategory }}
+        />
       </section>
 
       <section className="flex flex-col gap-2">
-        <h2 className="text-sm font-medium text-muted-foreground lg:text-base">고정지출 계획</h2>
-        <BudgetReviewTable month={monthKey} rows={fixedExpenseRows} showActual={false} onSaved={refresh} />
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-medium text-muted-foreground lg:text-base">고정지출 계획</h2>
+          {fixedExpenseCategories.length > 0 && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              onClick={() => setAddingFixedLabel((v) => !v)}
+            >
+              <PlusIcon className="size-4" />
+              <span className="sr-only">추가</span>
+            </Button>
+          )}
+        </div>
+        {addingFixedLabel && (
+          <div className="flex items-center gap-1.5">
+            <Input
+              autoFocus
+              placeholder="새 세부항목 이름"
+              value={newFixedLabelName}
+              onChange={(e) => setNewFixedLabelName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleAddFixedLabel();
+              }}
+            />
+            <Button type="button" onClick={handleAddFixedLabel}>
+              추가
+            </Button>
+          </div>
+        )}
+        {addFixedLabelError && <p className="text-sm text-expense">{addFixedLabelError}</p>}
+        <BudgetReviewTable
+          month={monthKey}
+          rows={fixedExpenseRows}
+          showActual={false}
+          onSaved={refresh}
+          manage={{ onRename: handleRenameFixedLabel, onDelete: handleDeleteFixedLabel }}
+        />
       </section>
 
       <section className="flex flex-col gap-2">
-        <h2 className="text-sm font-medium text-muted-foreground lg:text-base">변동지출 계획</h2>
-        <BudgetReviewTable month={monthKey} rows={variableExpenseRows} showActual={false} onSaved={refresh} />
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-medium text-muted-foreground lg:text-base">변동지출 계획</h2>
+          <div className="flex items-center gap-1.5">
+            <Button type="button" variant="ghost" size="icon-sm" onClick={openAddVariableItemModal}>
+              <PlusIcon className="size-4" />
+              <span className="sr-only">추가</span>
+            </Button>
+          </div>
+        </div>
+        <VariableBudgetItemList
+          items={variableBudgetItems}
+          onEdit={openEditVariableItemModal}
+          onDelete={handleDeleteVariableItem}
+        />
       </section>
 
       <WeeklyBudgetItemModal
@@ -304,6 +492,19 @@ export default function BudgetPlanPage({ params }: { params: Promise<{ month: st
         weekStart={modalWeekStart}
         categories={expenseCategories}
         item={editingItem}
+        onSaved={refresh}
+      />
+
+      <VariableBudgetItemModal
+        key={editingVariableItem?.id ?? "new"}
+        open={variableItemModalOpen}
+        onOpenChange={(next) => {
+          setVariableItemModalOpen(next);
+          if (!next) setEditingVariableItem(null);
+        }}
+        month={monthKey}
+        categories={variableExpenseCategories}
+        item={editingVariableItem}
         onSaved={refresh}
       />
     </main>
