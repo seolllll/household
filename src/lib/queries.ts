@@ -289,6 +289,7 @@ export interface VariableBudgetItemInput {
   category_id: string;
   amount: number;
   memo: string | null;
+  detail_memo: string | null;
 }
 
 /** 변동지출 계획 항목의 카테고리별 합계를 budgets.amount에 동기화(오차원인·피드백은 기존 값 유지). 월말정산의 예산 숫자가 이 목록을 그대로 따라가게 하기 위함. */
@@ -338,6 +339,15 @@ export async function deleteVariableBudgetItem(id: string, categoryId: string, m
   await syncVariableCategoryBudget(categoryId, month);
 }
 
+export async function updateVariableBudgetItemReview(
+  id: string,
+  reason: string | null,
+  feedback: string | null
+): Promise<void> {
+  const { error } = await supabase.from("variable_budget_items").update({ reason, feedback }).eq("id", id);
+  if (error) throw error;
+}
+
 export async function fetchAssetItems(): Promise<AssetItem[]> {
   const { data, error } = await supabase
     .from("asset_items")
@@ -346,6 +356,78 @@ export async function fetchAssetItems(): Promise<AssetItem[]> {
     .order("sort_order", { ascending: true });
   if (error) throw error;
   return data ?? [];
+}
+
+/** 구분(group_name)별로, 그 안에서는 내역(subgroup)별로 sort_order를 다시 매겨 목록 안에서 같은 구분/내역끼리 항상 붙어있게 만든다. */
+async function resequenceAssetItems(): Promise<void> {
+  const items = await fetchAssetItems();
+
+  const groupOrder: string[] = [];
+  const subgroupOrderByGroup = new Map<string, string[]>();
+  const buckets = new Map<string, AssetItem[]>();
+  for (const item of items) {
+    if (!groupOrder.includes(item.group_name)) groupOrder.push(item.group_name);
+    const subgroupOrder = subgroupOrderByGroup.get(item.group_name) ?? [];
+    if (!subgroupOrder.includes(item.subgroup)) subgroupOrder.push(item.subgroup);
+    subgroupOrderByGroup.set(item.group_name, subgroupOrder);
+    const key = `${item.group_name} ${item.subgroup}`;
+    buckets.set(key, [...(buckets.get(key) ?? []), item]);
+  }
+
+  const ordered = groupOrder.flatMap((group) =>
+    (subgroupOrderByGroup.get(group) ?? []).flatMap(
+      (subgroup) => buckets.get(`${group} ${subgroup}`) ?? []
+    )
+  );
+
+  if (ordered.every((item, index) => item.sort_order === index)) return;
+
+  // 최종 순서로 바로 옮기면 아직 안 옮겨진 다른 행과 sort_order가 잠깐 겹칠 수 있어, 안 쓰는 임시 구간으로 먼저 옮긴 뒤 최종 위치로 옮긴다.
+  // 행마다 따로 요청을 보내면 중간에 끊겼을 때 절반만 바뀐 채로 남을 수 있어, 각 단계를 요청 하나(bulk upsert)로 묶는다.
+  const TEMP_OFFSET = 1_000_000;
+  const { error: tempError } = await supabase
+    .from("asset_items")
+    .upsert(ordered.map((item, index) => ({ ...item, sort_order: TEMP_OFFSET + index })));
+  if (tempError) throw tempError;
+
+  const { error: finalError } = await supabase
+    .from("asset_items")
+    .upsert(ordered.map((item, index) => ({ ...item, sort_order: index })));
+  if (finalError) throw finalError;
+}
+
+export async function createAssetItem(groupName: string, subgroup: string, label: string): Promise<void> {
+  const { data: last, error: findError } = await supabase
+    .from("asset_items")
+    .select("sort_order")
+    .order("sort_order", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (findError) throw findError;
+  const { error } = await supabase
+    .from("asset_items")
+    .insert({ group_name: groupName, subgroup, label, sort_order: (last?.sort_order ?? -1) + 1 });
+  if (error) throw error;
+  await resequenceAssetItems();
+}
+
+export async function updateAssetItem(
+  id: string,
+  groupName: string,
+  subgroup: string,
+  label: string
+): Promise<void> {
+  const { error } = await supabase
+    .from("asset_items")
+    .update({ group_name: groupName, subgroup, label })
+    .eq("id", id);
+  if (error) throw error;
+  await resequenceAssetItems();
+}
+
+export async function deleteAssetItem(id: string): Promise<void> {
+  const { error } = await supabase.from("asset_items").update({ is_active: false }).eq("id", id);
+  if (error) throw error;
 }
 
 export async function fetchAssetSnapshots(month: string): Promise<AssetSnapshot[]> {

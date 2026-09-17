@@ -44,7 +44,12 @@ export function VariableBudgetItemList({ items, onEdit, onDelete }: VariableBudg
                       className="flex items-center justify-between gap-2 text-left"
                       onClick={() => setActiveItemId((id) => (id === item.id ? null : item.id))}
                     >
-                      <span>{item.memo || categoryName}</span>
+                      <span className="flex items-baseline gap-1.5">
+                        <span>{item.memo || categoryName}</span>
+                        {item.detail_memo && (
+                          <span className="truncate text-xs text-muted-foreground">{item.detail_memo}</span>
+                        )}
+                      </span>
                       <span className="shrink-0 font-medium tabular-nums text-expense">
                         {formatCurrency(item.amount)}
                       </span>

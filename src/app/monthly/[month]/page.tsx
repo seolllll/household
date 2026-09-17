@@ -4,9 +4,8 @@ import { use, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
 import { cn } from "cn";
-import { SummaryCards } from "@/components/summary-cards";
 import { BudgetExcelTable } from "@/components/budget-excel-table";
-import { BudgetGroupedExcelTable } from "@/components/budget-grouped-excel-table";
+import { VariableBudgetItemReviewTable } from "@/components/variable-budget-item-review-table";
 import { AssetReviewSection } from "@/components/asset-review-section";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatCurrency } from "@/lib/format";
@@ -20,8 +19,10 @@ import {
   fetchCategories,
   fetchMonthlyBudget,
   fetchTransactions,
+  fetchVariableBudgetItems,
   type BudgetWithCategory,
   type TransactionWithCategory,
+  type VariableBudgetItemWithCategory,
 } from "@/lib/queries";
 import type { AssetItem, AssetSnapshot, BudgetLabel, Category } from "@/types/database";
 
@@ -38,6 +39,7 @@ export default function MonthlyPage({ params }: { params: Promise<{ month: strin
   const [assetSnapshots, setAssetSnapshots] = useState<AssetSnapshot[]>([]);
   const [prevAssetSnapshots, setPrevAssetSnapshots] = useState<AssetSnapshot[]>([]);
   const [budgetLabels, setBudgetLabels] = useState<BudgetLabel[]>([]);
+  const [variableBudgetItems, setVariableBudgetItems] = useState<VariableBudgetItemWithCategory[]>([]);
   const [refreshKey, setRefreshKey] = useState(0);
 
   const monthKey = parsed ? getMonthRange(parsed.year, parsed.month).from : null;
@@ -59,6 +61,7 @@ export default function MonthlyPage({ params }: { params: Promise<{ month: strin
       fetchAssetItems(),
       fetchAssetSnapshots(monthKey),
       fetchAssetSnapshots(prevMonthKey),
+      fetchVariableBudgetItems(monthKey),
     ]).then(
       async ([
         tx,
@@ -69,6 +72,7 @@ export default function MonthlyPage({ params }: { params: Promise<{ month: strin
         assetItemRows,
         assetSnapshotRows,
         prevAssetSnapshotRows,
+        variableItemRows,
       ]) => {
         if (cancelled) return;
         const fixedCategoryIds = expenseCats
@@ -85,6 +89,7 @@ export default function MonthlyPage({ params }: { params: Promise<{ month: strin
         setAssetSnapshots(assetSnapshotRows);
         setPrevAssetSnapshots(prevAssetSnapshotRows);
         setBudgetLabels(labelRows);
+        setVariableBudgetItems(variableItemRows);
       }
     );
 
@@ -93,9 +98,6 @@ export default function MonthlyPage({ params }: { params: Promise<{ month: strin
     };
   }, [parsed, monthKey, prevMonthKey, refreshKey]);
 
-  const income = transactions
-    .filter((t) => t.type === "income")
-    .reduce((sum, t) => sum + t.amount, 0);
   const expense = transactions
     .filter((t) => t.type === "expense")
     .reduce((sum, t) => sum + t.amount, 0);
@@ -106,13 +108,12 @@ export default function MonthlyPage({ params }: { params: Promise<{ month: strin
 
   const incomeRows = buildRows(incomeCategories, transactions, budgets);
   const fixedExpenseRows = buildFixedExpenseLabelRows(fixedExpenseCategories, transactions, budgets, budgetLabels);
-  const variableExpenseRows = buildRows(variableExpenseCategories, transactions, budgets);
 
   function refresh() {
     setRefreshKey((k) => k + 1);
   }
 
-  if (!parsed || !monthKey) {
+  if (!parsed || !monthKey || !prevMonthKey) {
     return (
       <main className="mx-auto flex max-w-xl flex-col gap-4 p-4 sm:p-6 lg:max-w-4xl lg:gap-6 lg:p-8">
         <p className="text-sm text-muted-foreground lg:text-base">잘못된 월입니다.</p>
@@ -149,8 +150,6 @@ export default function MonthlyPage({ params }: { params: Promise<{ month: strin
         </Link>
       </div>
 
-      <SummaryCards income={income} expense={expense} />
-
       <section className="flex flex-col gap-2">
         <h2 className="text-sm font-medium text-muted-foreground lg:text-base">수입</h2>
         <BudgetExcelTable month={monthKey} actualLabel="수입" rows={incomeRows} onSaved={refresh} />
@@ -163,33 +162,27 @@ export default function MonthlyPage({ params }: { params: Promise<{ month: strin
 
       <section className="flex flex-col gap-2">
         <h2 className="text-sm font-medium text-muted-foreground lg:text-base">변동지출</h2>
-        <BudgetGroupedExcelTable month={monthKey} rows={variableExpenseRows} onSaved={refresh} />
+        <VariableBudgetItemReviewTable
+          month={monthKey}
+          categories={variableExpenseCategories}
+          items={variableBudgetItems}
+          budgets={budgets}
+          transactions={transactions}
+          onSaved={refresh}
+        />
       </section>
 
       <section className="flex flex-col gap-2">
         <h2 className="text-sm font-medium text-muted-foreground lg:text-base">자산현황</h2>
         <AssetReviewSection
           month={monthKey}
+          prevMonth={prevMonthKey}
           items={assetItems}
           snapshots={assetSnapshots}
           prevSnapshots={prevAssetSnapshots}
           onSaved={refresh}
         />
       </section>
-
-      <Card size="sm" className="border-primary/30 bg-white">
-        <CardContent className="flex items-center justify-between">
-          <span className="text-xs text-muted-foreground lg:text-sm">다음달로 이월되는 금액</span>
-          <span
-            className={cn(
-              "text-lg font-semibold tracking-tight sm:text-lg lg:text-2xl",
-              carryover < 0 && "text-expense"
-            )}
-          >
-            {formatCurrency(carryover)}
-          </span>
-        </CardContent>
-      </Card>
     </main>
   );
 }

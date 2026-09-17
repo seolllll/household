@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { cn } from "cn";
 import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
+import { ReviewInputCell } from "@/components/review-input-cell";
 import { formatCurrency } from "@/lib/format";
 import { upsertBudget } from "@/lib/queries";
 import { varianceClass, type BudgetReviewRow } from "@/components/budget-review-table";
@@ -66,15 +66,10 @@ export function BudgetEditableCells({
         <span className="block truncate">{formatCurrency(variance)}</span>
       </td>
       <td className="py-1 px-1 align-middle">
-        <Input value={reason} onChange={(e) => setReason(e.target.value)} onBlur={() => save({})} className="w-full" />
+        <ReviewInputCell value={reason} onChange={setReason} onBlur={() => save({})} />
       </td>
       <td className="py-1 px-1 align-middle">
-        <Input
-          value={feedback}
-          onChange={(e) => setFeedback(e.target.value)}
-          onBlur={() => save({})}
-          className="w-full"
-        />
+        <ReviewInputCell value={feedback} onChange={setFeedback} onBlur={() => save({})} expandable />
       </td>
     </>
   );

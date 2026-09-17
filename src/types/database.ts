@@ -71,6 +71,10 @@ export type VariableBudgetItem = {
   category_id: string;
   amount: number;
   memo: string | null;
+  /** 항목 리스트에서 항목명 옆에 작게 표시되는 참고용 상세 설명. 실거래 매칭에는 쓰이지 않음. */
+  detail_memo: string | null;
+  reason: string | null;
+  feedback: string | null;
   created_at: string;
   updated_at: string;
 };

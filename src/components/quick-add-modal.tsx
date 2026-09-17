@@ -28,13 +28,37 @@ import {
   fetchBudgetLabels,
   fetchCategories,
   fetchRecentCategoryIds,
+  fetchVariableBudgetItems,
   updateCategory,
   updateTransaction,
   type TransactionWithCategory,
+  type VariableBudgetItemWithCategory,
 } from "@/lib/queries";
 import { toDateKey } from "@/lib/date-range";
 import { FIXED_EXPENSE_GROUP } from "@/lib/budget-rows";
 import type { BudgetLabel, Category, TransactionType } from "@/types/database";
+
+/** 카테고리 밑에 보여줄 2뎁스 세부항목 칩. 고정지출은 budget_labels(월 무관 고정 목록), 변동지출은 그 달의 variable_budget_items(월별 계획) memo에서 가져옴. */
+interface SubItemOption {
+  id: string;
+  name: string;
+}
+
+function variableSubItemOptions(
+  items: VariableBudgetItemWithCategory[],
+  categoryId: string
+): SubItemOption[] {
+  const seen = new Set<string>();
+  const options: SubItemOption[] = [];
+  for (const item of items) {
+    if (item.category_id !== categoryId) continue;
+    const name = (item.memo ?? "").trim();
+    if (!name || seen.has(name)) continue;
+    seen.add(name);
+    options.push({ id: item.id, name });
+  }
+  return options;
+}
 
 interface QuickAddModalProps {
   open: boolean;
@@ -61,6 +85,7 @@ export function QuickAddModal({
   const [type, setType] = useState<TransactionType>(transaction?.type ?? "expense");
   const [categories, setCategories] = useState<Category[]>([]);
   const [budgetLabels, setBudgetLabels] = useState<BudgetLabel[]>([]);
+  const [variableBudgetItems, setVariableBudgetItems] = useState<VariableBudgetItemWithCategory[]>([]);
   const [categoryId, setCategoryId] = useState<string | null>(transaction?.category_id ?? null);
   const [amount, setAmount] = useState(transaction ? String(transaction.amount) : "");
   const [date, setDate] = useState(() => transaction?.date ?? toDateKey(new Date()));
@@ -94,6 +119,16 @@ export function QuickAddModal({
       await loadCategories();
     })();
   }, [open, type]);
+
+  const monthKey = `${date.slice(0, 7)}-01`;
+
+  useEffect(() => {
+    if (!open || type !== "expense") {
+      setVariableBudgetItems([]);
+      return;
+    }
+    fetchVariableBudgetItems(monthKey).then(setVariableBudgetItems);
+  }, [open, type, monthKey]);
 
   function resetForm() {
     setType("expense");
@@ -148,10 +183,11 @@ export function QuickAddModal({
   const isValid = amountValue > 0 && Boolean(categoryId) && Boolean(date);
 
   const selectedCategory = categories.find((c) => c.id === categoryId) ?? null;
-  const selectedCategoryLabels =
-    selectedCategory?.report_group === FIXED_EXPENSE_GROUP
+  const selectedCategoryLabels: SubItemOption[] = !selectedCategory
+    ? []
+    : selectedCategory.report_group === FIXED_EXPENSE_GROUP
       ? budgetLabels.filter((l) => l.category_id === selectedCategory.id)
-      : [];
+      : variableSubItemOptions(variableBudgetItems, selectedCategory.id);
 
   function toggleMemoLabel(name: string) {
     setMemo((m) => (m.trim() === name ? "" : name));

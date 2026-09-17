@@ -40,10 +40,18 @@ export function VariableBudgetItemModal({
   const [categoryId, setCategoryId] = useState<string | null>(item?.category_id ?? null);
   const [amount, setAmount] = useState(item ? String(item.amount) : "");
   const [memo, setMemo] = useState(item?.memo ?? "");
+  const [detailMemo, setDetailMemo] = useState(item?.detail_memo ?? "");
   const [saving, setSaving] = useState(false);
 
   const amountValue = Number(amount);
   const isValid = amountValue > 0 && Boolean(categoryId) && Boolean(month);
+
+  function resetForm() {
+    setCategoryId(null);
+    setAmount("");
+    setMemo("");
+    setDetailMemo("");
+  }
 
   async function handleSave() {
     if (!isValid || !categoryId || !month) return;
@@ -54,6 +62,7 @@ export function VariableBudgetItemModal({
         category_id: categoryId,
         amount: amountValue,
         memo: memo.trim() || null,
+        detail_memo: detailMemo.trim() || null,
       };
       if (item) {
         await updateVariableBudgetItem(
@@ -72,7 +81,13 @@ export function VariableBudgetItemModal({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) resetForm();
+        onOpenChange(next);
+      }}
+    >
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{item ? "지출 계획 수정" : "지출 계획 추가"}</DialogTitle>
@@ -118,13 +133,24 @@ export function VariableBudgetItemModal({
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="variable-budget-item-memo">메모</Label>
+            <Label htmlFor="variable-budget-item-memo">세부 분류</Label>
             <Input
               id="variable-budget-item-memo"
               type="text"
               placeholder="예: 커피"
               value={memo}
               onChange={(e) => setMemo(e.target.value)}
+            />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="variable-budget-item-detail-memo">상세 메모</Label>
+            <Input
+              id="variable-budget-item-detail-memo"
+              type="text"
+              placeholder="예: 스타벅스 위주, 주 3회"
+              value={detailMemo}
+              onChange={(e) => setDetailMemo(e.target.value)}
             />
           </div>
         </div>

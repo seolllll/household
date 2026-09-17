@@ -45,6 +45,12 @@ export function WeeklyBudgetItemModal({
   const amountValue = Number(amount);
   const isValid = amountValue > 0 && Boolean(categoryId) && Boolean(weekStart);
 
+  function resetForm() {
+    setCategoryId(null);
+    setAmount("");
+    setMemo("");
+  }
+
   async function handleSave() {
     if (!isValid || !categoryId || !weekStart) return;
     setSaving(true);
@@ -68,7 +74,13 @@ export function WeeklyBudgetItemModal({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) resetForm();
+        onOpenChange(next);
+      }}
+    >
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{item ? "지출 계획 수정" : "지출 계획 추가"}</DialogTitle>
