@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import { BottomNav } from "@/components/bottom-nav";
+import { AppShell } from "@/components/app-shell";
+import { SessionProvider } from "@/lib/session-context";
+import { getSession } from "@/lib/session";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -18,15 +20,17 @@ export const metadata: Metadata = {
   description: "개인용 가계부",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default async function RootLayout({ children }: LayoutProps<"/">) {
+  const session = await getSession();
   return (
     <html
       lang="ko"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
-        <div className="flex-1 pb-16">{children}</div>
-        <BottomNav />
+        <SessionProvider loggedIn={!!session}>
+          <AppShell>{children}</AppShell>
+        </SessionProvider>
       </body>
     </html>
   );

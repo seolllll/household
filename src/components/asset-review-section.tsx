@@ -167,6 +167,7 @@ function AssetRow({
 }) {
   const { item, showGroupCell, groupRowSpan, showSubgroupCell, subgroupRowSpan } = meta;
   const [amountInput, setAmountInput] = useState(String(snapshot?.amount ?? ""));
+  const [amountEditing, setAmountEditing] = useState(false);
   const [reasonInput, setReasonInput] = useState(snapshot?.reason ?? "");
   const [feedbackInput, setFeedbackInput] = useState(snapshot?.feedback ?? "");
 
@@ -184,6 +185,7 @@ function AssetRow({
   }
 
   function handleAmountBlur() {
+    setAmountEditing(false);
     const value = Number(amountInput);
     if (!Number.isFinite(value)) {
       setAmountInput(String(amount));
@@ -191,6 +193,8 @@ function AssetRow({
     }
     save({ amount: value });
   }
+
+  const amountBorderless = amountInput !== "" && !amountEditing;
 
   return (
     <tr className="border-b border-border">
@@ -216,12 +220,13 @@ function AssetRow({
       <td className="py-2 px-1 text-right tabular-nums align-middle">{formatCurrency(prevAmount)}</td>
       <td className="py-1 px-1 align-middle">
         <Input
-          type="number"
+          type={amountEditing ? "number" : "text"}
           inputMode="numeric"
-          value={amountInput}
+          value={amountEditing || amountInput === "" ? amountInput : formatCurrency(Number(amountInput))}
+          onFocus={() => setAmountEditing(true)}
           onChange={(e) => setAmountInput(e.target.value)}
           onBlur={handleAmountBlur}
-          className="w-full text-right"
+          className={cn("w-full text-right", amountBorderless && "border-transparent")}
         />
       </td>
       <td className={cn("py-2 px-1 text-right tabular-nums align-middle", varianceTextClass(variance))}>

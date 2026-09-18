@@ -2,6 +2,7 @@ export type TransactionType = "income" | "expense";
 
 export type Category = {
   id: string;
+  household_id: string;
   name: string;
   type: TransactionType;
   icon: string | null;
@@ -15,6 +16,7 @@ export type Category = {
 
 export type Transaction = {
   id: string;
+  household_id: string;
   category_id: string;
   type: TransactionType;
   amount: number;
@@ -26,6 +28,7 @@ export type Transaction = {
 
 export type Budget = {
   id: string;
+  household_id: string;
   category_id: string;
   month: string;
   /** 카테고리 전체 예산이면 ''. "고정지출"처럼 카테고리 안에서 세부항목별로 예산을 나눌 때만 항목명(예: "계비"). */
@@ -39,6 +42,7 @@ export type Budget = {
 
 export type MonthlyBudget = {
   id: string;
+  household_id: string;
   month: string;
   amount: number;
   created_at: string;
@@ -47,6 +51,7 @@ export type MonthlyBudget = {
 
 export type WeeklyBudgetItem = {
   id: string;
+  household_id: string;
   week_start: string;
   category_id: string;
   amount: number;
@@ -58,6 +63,7 @@ export type WeeklyBudgetItem = {
 /** "고정지출"처럼 카테고리 하나 안에서 예산/실제를 세부항목별로 쪼개 보여줄 때 쓰는 항목 목록. */
 export type BudgetLabel = {
   id: string;
+  household_id: string;
   category_id: string;
   name: string;
   sort_order: number;
@@ -67,6 +73,7 @@ export type BudgetLabel = {
 /** 변동지출 계획을 카테고리 안에서 항목 단위(예: "커피")로 쪼개 입력하는 목록. 카테고리별 합계가 budgets.amount에 자동 반영됨. */
 export type VariableBudgetItem = {
   id: string;
+  household_id: string;
   month: string;
   category_id: string;
   amount: number;
@@ -81,6 +88,7 @@ export type VariableBudgetItem = {
 
 export type AssetItem = {
   id: string;
+  household_id: string;
   group_name: string;
   subgroup: string;
   label: string;
@@ -90,11 +98,26 @@ export type AssetItem = {
 
 export type AssetSnapshot = {
   id: string;
+  household_id: string;
   asset_item_id: string;
   month: string;
   amount: number;
   reason: string | null;
   feedback: string | null;
+};
+
+export type Household = {
+  id: string;
+  name: string;
+  created_at: string;
+};
+
+export type AppUser = {
+  id: string;
+  username: string;
+  password_hash: string;
+  household_id: string;
+  created_at: string;
 };
 
 export type Database = {
@@ -202,6 +225,26 @@ export type Database = {
             columns: ["asset_item_id"];
             isOneToOne: false;
             referencedRelation: "asset_items";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      households: {
+        Row: Household;
+        Insert: Partial<Household> & Pick<Household, "name">;
+        Update: Partial<Household>;
+        Relationships: [];
+      };
+      app_users: {
+        Row: AppUser;
+        Insert: Partial<AppUser> & Pick<AppUser, "username" | "password_hash" | "household_id">;
+        Update: Partial<AppUser>;
+        Relationships: [
+          {
+            foreignKeyName: "app_users_household_id_fkey";
+            columns: ["household_id"];
+            isOneToOne: false;
+            referencedRelation: "households";
             referencedColumns: ["id"];
           },
         ];

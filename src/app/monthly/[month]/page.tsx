@@ -12,14 +12,7 @@ import { formatCurrency } from "@/lib/format";
 import { encodeMonthParam, getMonthRange, parseMonthParam } from "@/lib/date-range";
 import { buildFixedExpenseLabelRows, buildRows, FIXED_EXPENSE_GROUP } from "@/lib/budget-rows";
 import {
-  fetchAssetItems,
-  fetchAssetSnapshots,
-  fetchBudgetLabels,
-  fetchBudgets,
-  fetchCategories,
-  fetchMonthlyBudget,
-  fetchTransactions,
-  fetchVariableBudgetItems,
+  fetchMonthlyPageData,
   type BudgetWithCategory,
   type TransactionWithCategory,
   type VariableBudgetItemWithCategory,
@@ -52,46 +45,19 @@ export default function MonthlyPage({ params }: { params: Promise<{ month: strin
     let cancelled = false;
     const range = getMonthRange(parsed.year, parsed.month);
 
-    Promise.all([
-      fetchTransactions(range),
-      fetchMonthlyBudget(monthKey),
-      fetchCategories("income"),
-      fetchCategories("expense"),
-      fetchBudgets(monthKey),
-      fetchAssetItems(),
-      fetchAssetSnapshots(monthKey),
-      fetchAssetSnapshots(prevMonthKey),
-      fetchVariableBudgetItems(monthKey),
-    ]).then(
-      async ([
-        tx,
-        monthlyBudget,
-        incomeCats,
-        expenseCats,
-        budgetRows,
-        assetItemRows,
-        assetSnapshotRows,
-        prevAssetSnapshotRows,
-        variableItemRows,
-      ]) => {
-        if (cancelled) return;
-        const fixedCategoryIds = expenseCats
-          .filter((c) => c.report_group === FIXED_EXPENSE_GROUP)
-          .map((c) => c.id);
-        const labelRows = await fetchBudgetLabels(fixedCategoryIds);
-        if (cancelled) return;
-        setTransactions(tx);
-        setBudgetAmount(monthlyBudget?.amount ?? 0);
-        setIncomeCategories(incomeCats);
-        setExpenseCategories(expenseCats);
-        setBudgets(budgetRows);
-        setAssetItems(assetItemRows);
-        setAssetSnapshots(assetSnapshotRows);
-        setPrevAssetSnapshots(prevAssetSnapshotRows);
-        setBudgetLabels(labelRows);
-        setVariableBudgetItems(variableItemRows);
-      }
-    );
+    fetchMonthlyPageData(range, monthKey, prevMonthKey).then((data) => {
+      if (cancelled) return;
+      setTransactions(data.transactions);
+      setBudgetAmount(data.budgetAmount);
+      setIncomeCategories(data.incomeCategories);
+      setExpenseCategories(data.expenseCategories);
+      setBudgets(data.budgets);
+      setAssetItems(data.assetItems);
+      setAssetSnapshots(data.assetSnapshots);
+      setPrevAssetSnapshots(data.prevAssetSnapshots);
+      setBudgetLabels(data.budgetLabels);
+      setVariableBudgetItems(data.variableBudgetItems);
+    });
 
     return () => {
       cancelled = true;

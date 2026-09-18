@@ -17,9 +17,7 @@ import { formatCurrency, formatShortDate } from "@/lib/format";
 import { enumerateDateKeys, getMonthRange, parseDateKey, toDateKey } from "@/lib/date-range";
 import { decodeWeekParam, encodeWeekParam, getMonthWeeks, isWeeklyBudgetExpense } from "@/lib/week";
 import {
-  fetchMonthlyBudget,
-  fetchTransactions,
-  fetchWeeklyBudgetItems,
+  fetchWeeklyDetailPageData,
   type TransactionWithCategory,
   type WeeklyBudgetItemWithCategory,
 } from "@/lib/queries";
@@ -84,19 +82,18 @@ export default function WeeklyDetailPage({
     let cancelled = false;
     const monthRange = getMonthRange(parsedWeek.year, parsedWeek.month);
     const monthKey = `${parsedWeek.year}-${String(parsedWeek.month + 1).padStart(2, "0")}-01`;
-    Promise.all([
-      fetchTransactions({ from: weekInfo.from, to: weekInfo.to }),
-      fetchTransactions({ from: monthRange.from, to: weekInfo.to }),
-      fetchMonthlyBudget(monthKey),
-      fetchWeeklyBudgetItems({ from: weekInfo.from, to: weekInfo.to }),
-    ]).then(([weekTx, cumulativeTx, budget, weeklyBudgetItemRows]) => {
+    fetchWeeklyDetailPageData(
+      { from: weekInfo.from, to: weekInfo.to },
+      { from: monthRange.from, to: weekInfo.to },
+      monthKey
+    ).then(({ weekTransactions, cumulativeTransactions, budgetAmount, weeklyBudgetItems: items }) => {
       if (cancelled) return;
-      setTransactions(weekTx);
+      setTransactions(weekTransactions);
       setCumulativeExpense(
-        cumulativeTx.filter(isWeeklyBudgetExpense).reduce((sum, t) => sum + t.amount, 0)
+        cumulativeTransactions.filter(isWeeklyBudgetExpense).reduce((sum, t) => sum + t.amount, 0)
       );
-      setBudgetAmount(budget?.amount ?? 0);
-      setWeeklyBudgetItems(weeklyBudgetItemRows);
+      setBudgetAmount(budgetAmount);
+      setWeeklyBudgetItems(items);
     });
     return () => {
       cancelled = true;

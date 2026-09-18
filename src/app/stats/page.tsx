@@ -22,12 +22,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ExcelDownloadDialog } from "@/components/excel-download-dialog";
 import { formatCurrency } from "@/lib/format";
 import { getRecentMonthRanges, parseDateKey } from "@/lib/date-range";
-import {
-  fetchAssetItems,
-  fetchAssetSnapshots,
-  fetchTransactions,
-  type TransactionWithCategory,
-} from "@/lib/queries";
+import { fetchInvestmentTrendData, fetchTransactions, type TransactionWithCategory } from "@/lib/queries";
 import type { AssetItem, AssetSnapshot } from "@/types/database";
 
 const LIQUID_GROUP = "유동성 자산";
@@ -156,18 +151,12 @@ export default function StatsPage() {
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([fetchAssetItems(), Promise.all(monthRanges.map((r) => fetchAssetSnapshots(r.from)))]).then(
-      ([items, snapshotsByRange]) => {
-        if (cancelled) return;
-        setAssetItems(items);
-        const map: Record<string, AssetSnapshot[]> = {};
-        monthRanges.forEach((r, i) => {
-          map[r.from] = snapshotsByRange[i];
-        });
-        setAssetSnapshotsByMonth(map);
-        setAssetLoading(false);
-      }
-    );
+    fetchInvestmentTrendData(monthRanges.map((r) => r.from)).then(({ assetItems: items, snapshotsByMonth }) => {
+      if (cancelled) return;
+      setAssetItems(items);
+      setAssetSnapshotsByMonth(snapshotsByMonth);
+      setAssetLoading(false);
+    });
     return () => {
       cancelled = true;
     };

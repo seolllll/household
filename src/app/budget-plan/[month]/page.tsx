@@ -21,12 +21,7 @@ import {
   deleteCategory,
   deleteVariableBudgetItem,
   deleteWeeklyBudgetItem,
-  fetchBudgetLabels,
-  fetchBudgets,
-  fetchCategories,
-  fetchMonthlyBudget,
-  fetchVariableBudgetItems,
-  fetchWeeklyBudgetItems,
+  fetchBudgetPlanPageData,
   renameBudgetLabel,
   updateCategory,
   upsertMonthlyBudget,
@@ -72,37 +67,16 @@ export default function BudgetPlanPage({ params }: { params: Promise<{ month: st
     let cancelled = false;
     const range = getMonthRange(parsed.year, parsed.month);
 
-    Promise.all([
-      fetchCategories("income"),
-      fetchCategories("expense"),
-      fetchBudgets(monthKey),
-      fetchMonthlyBudget(monthKey),
-      fetchWeeklyBudgetItems(range),
-      fetchVariableBudgetItems(monthKey),
-    ]).then(
-      async ([
-        incomeCats,
-        expenseCats,
-        budgetRows,
-        monthlyBudget,
-        weeklyBudgetItemRows,
-        variableBudgetItemRows,
-      ]) => {
-        if (cancelled) return;
-        const fixedCategoryIds = expenseCats
-          .filter((c) => c.report_group === FIXED_EXPENSE_GROUP)
-          .map((c) => c.id);
-        const labelRows = await fetchBudgetLabels(fixedCategoryIds);
-        if (cancelled) return;
-        setIncomeCategories(incomeCats);
-        setExpenseCategories(expenseCats);
-        setBudgets(budgetRows);
-        setBudgetLabels(labelRows);
-        setLivingBudget(monthlyBudget?.amount ?? 0);
-        setWeeklyBudgetItems(weeklyBudgetItemRows);
-        setVariableBudgetItems(variableBudgetItemRows);
-      }
-    );
+    fetchBudgetPlanPageData(range, monthKey).then((data) => {
+      if (cancelled) return;
+      setIncomeCategories(data.incomeCategories);
+      setExpenseCategories(data.expenseCategories);
+      setBudgets(data.budgets);
+      setBudgetLabels(data.budgetLabels);
+      setLivingBudget(data.livingBudget);
+      setWeeklyBudgetItems(data.weeklyBudgetItems);
+      setVariableBudgetItems(data.variableBudgetItems);
+    });
 
     return () => {
       cancelled = true;

@@ -9,12 +9,7 @@ import { RemainingBudgetBar } from "@/components/remaining-budget-bar";
 import { formatCurrency, formatShortDate } from "@/lib/format";
 import { getMonthRange, toDateKey } from "@/lib/date-range";
 import { encodeWeekParam, getMonthWeeks, isWeeklyBudgetExpense } from "@/lib/week";
-import {
-  fetchMonthlyBudget,
-  fetchTransactions,
-  fetchWeeklyBudgetItems,
-  type TransactionWithCategory,
-} from "@/lib/queries";
+import { fetchWeeklyListPageData, type TransactionWithCategory } from "@/lib/queries";
 
 export default function WeeklyPage() {
   const today = useMemo(() => new Date(), []);
@@ -36,16 +31,12 @@ export default function WeeklyPage() {
   useEffect(() => {
     let cancelled = false;
     const range = getMonthRange(year, month);
-    Promise.all([
-      fetchTransactions(range),
-      fetchMonthlyBudget(monthKey),
-      fetchWeeklyBudgetItems(range),
-    ]).then(([tx, budget, weeklyBudgetItemRows]) => {
+    fetchWeeklyListPageData(range, monthKey).then(({ transactions: tx, budgetAmount, weeklyBudgetItems }) => {
       if (cancelled) return;
       setTransactions(tx);
-      setBudgetAmount(budget?.amount ?? 0);
+      setBudgetAmount(budgetAmount);
       const totals: Record<string, number> = {};
-      for (const item of weeklyBudgetItemRows) {
+      for (const item of weeklyBudgetItems) {
         totals[item.week_start] = (totals[item.week_start] ?? 0) + item.amount;
       }
       setWeeklyBudgetMap(totals);

@@ -4,18 +4,8 @@ import { getMonthWeeks, isWeeklyBudgetExpense, type MonthWeek } from "@/lib/week
 import { buildFixedExpenseLabelRows, buildRows, FIXED_EXPENSE_GROUP } from "@/lib/budget-rows";
 import { actualForItem, buildGroups } from "@/components/variable-budget-item-review-table";
 import type { BudgetReviewRow } from "@/components/budget-review-table";
-import {
-  fetchAssetItems,
-  fetchAssetSnapshots,
-  fetchBudgetLabels,
-  fetchBudgets,
-  fetchCategories,
-  fetchMonthlyBudget,
-  fetchTransactions,
-  fetchVariableBudgetItems,
-  type TransactionWithCategory,
-} from "@/lib/queries";
-import type { AssetItem, AssetSnapshot, Category, TransactionType } from "@/types/database";
+import { fetchExportData, type ExportData, type TransactionWithCategory } from "@/lib/queries";
+import type { AssetItem, AssetSnapshot, BudgetLabel, Category, TransactionType } from "@/types/database";
 
 export interface MonthTarget {
   year: number;
@@ -150,12 +140,13 @@ function writeDailyTxTable(
   });
 }
 
-async function writeDailySheet(sheet: ExcelJS.Worksheet, m: MonthTarget, transactions: TransactionWithCategory[]) {
-  const [incomeCategories, expenseCategories] = await Promise.all([
-    fetchCategories("income"),
-    fetchCategories("expense"),
-  ]);
-
+function writeDailySheet(
+  sheet: ExcelJS.Worksheet,
+  m: MonthTarget,
+  transactions: TransactionWithCategory[],
+  incomeCategories: Category[],
+  expenseCategories: Category[]
+) {
   sheet.columns = [
     { width: 11.9 }, { width: 8.4 }, { width: 13.6 }, { width: 10.5 }, { width: 3 },
     { width: 17 }, { width: 11 }, { width: 21.1 }, { width: 10.5 }, { width: 3 },
@@ -396,18 +387,13 @@ function writeWeekDayGrid(
   return r + 1; // 다음 주차 블록 전 빈 줄
 }
 
-async function writeWeeklySheet(
+function writeWeeklySheet(
   sheet: ExcelJS.Worksheet,
   m: MonthTarget,
-  transactions: TransactionWithCategory[]
+  transactions: TransactionWithCategory[],
+  budgetAmount: number,
+  expenseCategories: Category[]
 ) {
-  const range = getMonthRange(m.year, m.month);
-  const monthKey = range.from;
-  const [monthlyBudget, expenseCategories] = await Promise.all([
-    fetchMonthlyBudget(monthKey),
-    fetchCategories("expense"),
-  ]);
-  const budgetAmount = monthlyBudget?.amount ?? 0;
   const weeks = getMonthWeeks(m.year, m.month);
 
   sheet.columns = [
@@ -764,34 +750,26 @@ function writeAssetTable(
   return r;
 }
 
-async function writeMonthlySheet(sheet: ExcelJS.Worksheet, m: MonthTarget, transactions: TransactionWithCategory[]) {
+function writeMonthlySheet(
+  sheet: ExcelJS.Worksheet,
+  m: MonthTarget,
+  transactions: TransactionWithCategory[],
+  incomeCategories: Category[],
+  expenseCategories: Category[],
+  budgets: ExportData["byMonth"][string]["budgets"],
+  assetItems: AssetItem[],
+  assetSnapshots: AssetSnapshot[],
+  prevAssetSnapshots: AssetSnapshot[],
+  variableBudgetItems: ExportData["byMonth"][string]["variableBudgetItems"],
+  budgetLabels: BudgetLabel[]
+) {
   const range = getMonthRange(m.year, m.month);
   const monthKey = range.from;
   const prevDate = new Date(m.year, m.month - 1, 1);
   const prevMonthKey = getMonthRange(prevDate.getFullYear(), prevDate.getMonth()).from;
 
-  const [
-    incomeCategories,
-    expenseCategories,
-    budgets,
-    assetItems,
-    assetSnapshots,
-    prevAssetSnapshots,
-    variableBudgetItems,
-  ] = await Promise.all([
-    fetchCategories("income"),
-    fetchCategories("expense"),
-    fetchBudgets(monthKey),
-    fetchAssetItems(),
-    fetchAssetSnapshots(monthKey),
-    fetchAssetSnapshots(prevMonthKey),
-    fetchVariableBudgetItems(monthKey),
-  ]);
-
   const fixedExpenseCategories = expenseCategories.filter((c) => c.report_group === FIXED_EXPENSE_GROUP);
   const variableExpenseCategories = expenseCategories.filter((c) => c.report_group !== FIXED_EXPENSE_GROUP);
-  const fixedCategoryIds = fixedExpenseCategories.map((c) => c.id);
-  const budgetLabels = await fetchBudgetLabels(fixedCategoryIds);
 
   sheet.columns = [
     { width: 20 },
@@ -836,23 +814,42 @@ export async function exportSettlementExcel(months: MonthTarget[], types: Settle
   const sorted = sortMonths(months);
   const multiYear = new Set(sorted.map((m) => m.year)).size > 1;
 
+  // 선택된 달 전체에 필요한 데이터를 서버 왕복 한 번으로 모아온 뒤, 아래는 그 결과만 가지고 동기적으로 시트를 채운다.
+  const exportData = await fetchExportData(sorted);
+
   const workbook = new ExcelJS.Workbook();
 
   for (const m of sorted) {
     if (!types.daily && !types.weekly && !types.monthly) continue;
-    const transactions = await fetchTransactions(getMonthRange(m.year, m.month));
+    const monthKey = getMonthRange(m.year, m.month).from;
+    const prevDate = new Date(m.year, m.month - 1, 1);
+    const prevMonthKey = getMonthRange(prevDate.getFullYear(), prevDate.getMonth()).from;
+    const monthData = exportData.byMonth[monthKey];
+    const transactions = monthData.transactions;
 
     if (types.daily) {
       const sheet = workbook.addWorksheet(sheetTitle(m, multiYear, "일일정산"));
-      await writeDailySheet(sheet, m, transactions);
+      writeDailySheet(sheet, m, transactions, exportData.incomeCategories, exportData.expenseCategories);
     }
     if (types.weekly) {
       const sheet = workbook.addWorksheet(sheetTitle(m, multiYear, "주간정산"));
-      await writeWeeklySheet(sheet, m, transactions);
+      writeWeeklySheet(sheet, m, transactions, monthData.monthlyBudgetAmount, exportData.expenseCategories);
     }
     if (types.monthly) {
       const sheet = workbook.addWorksheet(sheetTitle(m, multiYear, "월간정산"));
-      await writeMonthlySheet(sheet, m, transactions);
+      writeMonthlySheet(
+        sheet,
+        m,
+        transactions,
+        exportData.incomeCategories,
+        exportData.expenseCategories,
+        monthData.budgets,
+        exportData.assetItems,
+        exportData.assetSnapshotsByMonth[monthKey] ?? [],
+        exportData.assetSnapshotsByMonth[prevMonthKey] ?? [],
+        monthData.variableBudgetItems,
+        exportData.budgetLabels
+      );
     }
   }
 

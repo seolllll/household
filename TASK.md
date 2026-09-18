@@ -237,10 +237,31 @@
 - 카드마다 "월별 데이터만 의미 있음"으로 조건부 숨김 처리를 반복하던 중, 아예 주별 통계 자체를 없애자는 결정 → `period`/`TrendPeriod`/주별·월별 토글 버튼/`weeklyBuckets`/`getRecentWeekRanges` 등 주별 관련 코드를 전부 제거하고 "기간별 지출 추이"를 "월별 지출 추이"로, `PeriodBucket`을 `MonthlyBucket`으로 정리.
 - 그래프 클릭 시 선택된 월 기준으로 아래 카드들이 갱신되는 동작은 그대로 유지(이제 그 "기간"이 항상 월 단위).
 
+## 2026-09-18
+
+### 로그인 기능 추가
+- 처음엔 Supabase Auth(`auth.users`) 기반으로 가구(household) 단위 멀티테넌시를 기획(신규 `households`/`household_members` 테이블, RLS 정책, `auth.uid()` 기반 INSERT 트리거)했으나, 구현 직전 "Supabase Auth를 쓰지 않고 직접 구현하고 싶다"는 방향 전환 요청을 받아 전면 재설계.
+- 최종 구조: **모든 DB 접근을 Next.js 서버(Server Action)가 대행**하도록 변경. 브라우저는 더 이상 Supabase를 직접 호출하지 않으며, `NEXT_PUBLIC_SUPABASE_ANON_KEY`도 완전히 제거(서버 전용 `SUPABASE_SERVICE_ROLE_KEY`로 대체).
+  - 계정은 자체 `app_users`(username/password_hash/household_id) 테이블로 관리(`household_members` 삭제, `auth.users` 미사용). 비밀번호는 `bcryptjs`로 해시.
+  - 세션은 `jose`로 서명한 stateless JWT를 `httpOnly` 쿠키에 저장(Next.js 공식 인증 가이드와 동일 패턴). 신규 `src/lib/session.ts`(createSession/getSession/deleteSession/requireHouseholdId), `src/lib/supabase/admin.ts`(service role 클라이언트, `server-only`), `src/lib/auth-actions.ts`(login/logout Server Action).
+  - `src/lib/queries.ts`의 기존 함수 33개 전부 `"use server"`로 전환하고, 각 함수 시작에서 `requireHouseholdId()`로 세션의 household_id를 읽어 모든 조회/삽입/수정/삭제에 명시적으로 필터링 — RLS 대신 이 서버 코드의 필터링 자체가 실제 보안 경계가 됨.
+  - 로그인 화면은 이메일이 아니라 "아이디"(순수 텍스트, `@` 불필요)로 입력받음 — Supabase Auth를 안 쓰므로 이메일 형식 제약이 아예 사라짐.
+  - `src/app/layout.tsx`(서버)가 세션을 먼저 확인해 `src/lib/session-context.tsx`로 내려주고, `src/components/app-shell.tsx`가 라우트 가드(미로그인 시 `/login`으로, 로그인 시 `/login` 접근하면 홈으로) 역할. 서버가 이미 로그인 여부를 알고 있어 로딩 깜빡임 없음.
+  - DB: 신규 `households`/`app_users`, 기존 9개 테이블(`categories`/`transactions`/`budgets`/`monthly_budgets`/`weekly_budget_items`/`budget_labels`/`variable_budget_items`/`asset_items`/`asset_snapshots`)에 `household_id` 컬럼 추가 후 백필. RLS·트리거는 불필요(서버가 유일한 접근 경로이기 때문).
+  - 계정 2개(`sjyeom`, `smchoi`) 생성, 서로 다른 `household_id`로 분리해 가구 간 데이터 격리 동작 확인.
+
+### 성능 - Server Action 전환 후 렌더링 지연 원인 발견 및 수정
+- 로그인 구조 전환으로 `queries.ts`의 모든 조회 함수가 Server Action이 된 이후, 월말정산을 비롯한 여러 화면의 렌더링이 눈에 띄게 느려지는 문제 발생.
+- 원인 확인: Next.js 공식 문서에 "Server Function은 클라이언트→서버 요청을 한 번에 하나씩만 처리한다(dispatches and awaits them one at a time)"고 명시돼 있음. 화면에서 `Promise.all`로 여러 `fetch*`를 동시에 부르는 것처럼 짜여 있어도 실제로는 순차 왕복이 되는 것. 월말정산은 페이지 하나당 최대 10회, 엑셀 다운로드는 선택한 달 수만큼(최대 150회 이상) 순차 왕복이 발생하고 있었음.
+- 해결: `queries.ts`에 페이지별 통합 조회 함수(`fetchWeeklyListPageData`/`fetchWeeklyDetailPageData`/`fetchMonthlyPageData`/`fetchBudgetPlanPageData`/`fetchInvestmentTrendData`/`fetchExportData`/`bulkImportTransactions`) 신규 추가 — 내부적으로는 기존 `fetch*` 함수를 그대로 `Promise.all`로 묶어 서버 안에서 병렬 처리(서버 내부 호출은 "한 번에 하나씩" 제약과 무관), 클라이언트는 왕복 1번만 하도록 `weekly`/`weekly/[week]`/`monthly/[month]`/`budget-plan/[month]`/`stats`/일일정산 엑셀 업로드/엑셀 다운로드(`export-excel.ts`) 전부 수정.
+
+### 월말정산 자산현황 - 금액 입력칸 UI 개선
+- 오차원인/피드백과 동일한 패턴으로, 금액도 값이 채워지면 테두리를 숨기고 `₩30,000` 형식으로 표시, 클릭(포커스)하면 다시 숫자 입력으로 전환되도록 수정(`asset-review-section.tsx`).
+
 ## 다음 작업 (예정)
 - [ ] 변동지출 분류 묶음(`categories.report_group`) 값 채우기 — 지금은 전부 비어있어서 카테고리별 단독 표시 상태
 - [ ] 저축 및 투자(K~N열) 업로드 반영 방식 논의
 - [ ] 일일정산 파일 업로드 양식 수정
 - [ ] 일일정산 업로드 시 "전체 삭제 → 삽입" 방식으로 변경
-- [ ] 로그인 기능 추가
+- [ ] 로그인 배포 전 비밀번호(현재 `1234` 등 테스트용) 강화, 가족 구성원 추가 계정 발급
 - [ ] (추가 예정 항목 있음)
