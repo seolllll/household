@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
+  DownloadIcon,
   Loader2Icon,
   PencilIcon,
   PlusIcon,
@@ -30,6 +31,7 @@ import {
   type TransactionWithCategory,
 } from "@/lib/queries";
 import { parseImportFile } from "@/lib/import-excel";
+import { exportSettlementExcel } from "@/lib/export-excel";
 import { formatCurrency, formatDateWithWeekday } from "@/lib/format";
 import { getMonthRange } from "@/lib/date-range";
 
@@ -47,6 +49,7 @@ export default function DailySettlementPage() {
   const [importStatus, setImportStatus] = useState<string | null>(null);
   const [importResultOpen, setImportResultOpen] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -102,6 +105,15 @@ export default function DailySettlementPage() {
     setRefreshKey((k) => k + 1);
   }
 
+  async function handleDownload() {
+    setDownloading(true);
+    try {
+      await exportSettlementExcel([{ year, month }], { daily: true, weekly: false, monthly: false });
+    } finally {
+      setDownloading(false);
+    }
+  }
+
   async function handleFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     e.target.value = "";
@@ -111,7 +123,7 @@ export default function DailySettlementPage() {
     setImportStatus(null);
     try {
       const parsed = await parseImportFile(file);
-      const { added, skipped } = await bulkImportTransactions(
+      const { added, skipped, deleted } = await bulkImportTransactions(
         parsed.items,
         parsed.incomeCategories,
         parsed.expenseCategories
@@ -121,8 +133,8 @@ export default function DailySettlementPage() {
         parsed.items.length === 0
           ? "가져올 내역이 없습니다"
           : skipped > 0
-            ? `${added}건 추가됨, ${skipped}건 실패`
-            : `${added}건 추가됨`
+            ? `기존 ${deleted}건 삭제, ${added}건 추가됨 (${skipped}건 실패)`
+            : `기존 ${deleted}건 삭제, ${added}건 추가됨`
       );
       setRefreshKey((k) => k + 1);
     } catch {
@@ -143,6 +155,10 @@ export default function DailySettlementPage() {
           {year}년 {month + 1}월
         </h1>
         <div className="flex items-center gap-1">
+          <Button type="button" variant="ghost" size="icon" disabled={downloading} onClick={handleDownload}>
+            {downloading ? <Loader2Icon className="animate-spin" /> : <DownloadIcon />}
+            <span className="sr-only">엑셀 다운로드</span>
+          </Button>
           <Button
             type="button"
             variant="ghost"

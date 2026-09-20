@@ -752,14 +752,41 @@ export async function fetchInvestmentTrendData(monthKeys: string[]): Promise<Inv
 export interface BulkImportResult {
   added: number;
   skipped: number;
+  deleted: number;
 }
 
-/** 엑셀 업로드 시 항목마다 서버를 왕복하지 않도록, 카테고리 생성부터 거래 추가까지 서버 한 번의 호출 안에서 처리. */
+/**
+ * 엑셀 업로드 시 항목마다 서버를 왕복하지 않도록, 카테고리 생성부터 거래 추가까지 서버 한 번의 호출 안에서 처리.
+ * 재업로드 시 중복 생성을 막기 위해, 파일에 포함된 날짜 범위(최소~최대)의 기존 내역을 먼저 전부 삭제한 뒤 새로 삽입한다.
+ */
 export async function bulkImportTransactions(
   items: ParsedImportItem[],
   incomeCategoryNames: string[],
   expenseCategoryNames: string[]
 ): Promise<BulkImportResult> {
+  if (items.length === 0) return { added: 0, skipped: 0, deleted: 0 };
+
+  const householdId = await requireHouseholdId();
+  const dates = items.map((item) => item.date);
+  const from = dates.reduce((min, d) => (d < min ? d : min));
+  const to = dates.reduce((max, d) => (d > max ? d : max));
+
+  const { count, error: countError } = await supabase
+    .from("transactions")
+    .select("id", { count: "exact", head: true })
+    .eq("household_id", householdId)
+    .gte("date", from)
+    .lte("date", to);
+  if (countError) throw countError;
+
+  const { error: deleteError } = await supabase
+    .from("transactions")
+    .delete()
+    .eq("household_id", householdId)
+    .gte("date", from)
+    .lte("date", to);
+  if (deleteError) throw deleteError;
+
   const [incomeCategories, expenseCategories] = await Promise.all([
     fetchCategories("income"),
     fetchCategories("expense"),
@@ -800,7 +827,7 @@ export async function bulkImportTransactions(
     }
   }
 
-  return { added, skipped };
+  return { added, skipped, deleted: count ?? 0 };
 }
 
 export interface ExportMonthData {

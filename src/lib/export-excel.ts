@@ -3,6 +3,7 @@ import { parseDateKey, toDateKey, getMonthRange } from "@/lib/date-range";
 import { getMonthWeeks, isWeeklyBudgetExpense, type MonthWeek } from "@/lib/week";
 import { buildFixedExpenseLabelRows, buildRows, FIXED_EXPENSE_GROUP } from "@/lib/budget-rows";
 import { actualForItem, buildGroups } from "@/components/variable-budget-item-review-table";
+import { matchesSubCategory, splitSubCategoryMemo } from "@/lib/sub-category-memo";
 import type { BudgetReviewRow } from "@/components/budget-review-table";
 import { fetchExportData, type ExportData, type TransactionWithCategory } from "@/lib/queries";
 import type { AssetItem, AssetSnapshot, BudgetLabel, Category, TransactionType } from "@/types/database";
@@ -117,23 +118,107 @@ function styleDailyColumnHeader(cell: ExcelJS.Cell) {
   cell.alignment = { vertical: "middle", horizontal: "center" };
 }
 
+/**
+ * ExcelJS는 Date 값을 절대 UTC 타임스탬프로 취급해 셀에 쓰기 때문에, 로컬 타임존 생성자(new Date(y,m,d))로 만든
+ * 자정 값을 그대로 넣으면 UTC+9(한국)에서는 하루 앞선 날짜로 저장된다. 반드시 UTC 자정으로 만들어야 한다.
+ * (반대로 업로드 파싱 쪽 excelDateToKey/toDateKey는 SheetJS가 로컬 생성자로 되돌려주는 값을 읽는 것이라 그대로 로컬 getter를 씀 — 서로 다른 라이브러리라 규칙이 다름.)
+ */
+function toExcelDate(dateKey: string): Date {
+  const [y, m, d] = dateKey.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d));
+}
+
+function colLetter(col: number): string {
+  let s = "";
+  let n = col;
+  while (n > 0) {
+    const rem = (n - 1) % 26;
+    s = String.fromCharCode(65 + rem) + s;
+    n = Math.floor((n - 1) / 26);
+  }
+  return s;
+}
+
+/** 같은 시트 안의 이름/세부분류 목록 범위를 드롭다운 소스로 거는 값 목록 유효성 검사. 새 항목 직접 타이핑도 막지 않도록 경고 수준으로만 표시. */
+function applyListValidation(
+  sheet: ExcelJS.Worksheet,
+  col: number,
+  fromRow: number,
+  toRow: number,
+  sourceCol: number,
+  sourceFromRow: number,
+  sourceToRow: number
+) {
+  if (sourceToRow < sourceFromRow) return;
+  const formula = `$${colLetter(sourceCol)}$${sourceFromRow}:$${colLetter(sourceCol)}$${sourceToRow}`;
+  for (let r = fromRow; r <= toRow; r++) {
+    sheet.getCell(r, col).dataValidation = {
+      type: "list",
+      allowBlank: true,
+      showErrorMessage: true,
+      errorStyle: "warning",
+      errorTitle: "목록에 없는 값",
+      error: "기존 목록에 없는 값입니다. 새로 입력하려면 그대로 진행하세요.",
+      formulae: [formula],
+    };
+  }
+}
+
+/**
+ * 분류(categoryCol)에 따라 세부분류 드롭다운 옵션이 자동으로 바뀌는 종속 유효성 검사.
+ * helperTableRange(분류명→세부분류 범위주소 매핑, 숨김 열)를 VLOOKUP해서 나온 범위 문자열을 INDIRECT로 참조.
+ * 주의: IFERROR 등으로 INDIRECT를 감싸면 목록 유효성 검사가 "범위 참조"로 인식하지 못해 드롭다운이 항상 빈 목록이 되므로 감싸지 않는다.
+ * (helperTableRange에는 모든 분류가 들어있어야 하며, 세부분류가 없는 분류는 빈 셀 범위로 매핑해서 VLOOKUP이 항상 매칭되게 한다.)
+ */
+function applyDependentListValidation(
+  sheet: ExcelJS.Worksheet,
+  col: number,
+  fromRow: number,
+  toRow: number,
+  categoryCol: number,
+  helperTableRange: string
+) {
+  const categoryColLetter = colLetter(categoryCol);
+  for (let r = fromRow; r <= toRow; r++) {
+    const formula = `INDIRECT(VLOOKUP($${categoryColLetter}$${r},${helperTableRange},2,FALSE))`;
+    sheet.getCell(r, col).dataValidation = {
+      type: "list",
+      allowBlank: true,
+      showErrorMessage: true,
+      errorStyle: "warning",
+      errorTitle: "목록에 없는 값",
+      error: "선택한 분류의 세부분류 목록에 없는 값입니다. 새로 입력하려면 그대로 진행하세요.",
+      formulae: [formula],
+    };
+  }
+}
+
 function writeDailyTxTable(
   sheet: ExcelJS.Worksheet,
   headerRow: number,
   startCol: number,
-  rows: { date: string; category: string; content: string; amount: number }[]
+  rows: { date: string; category: string; subCategory?: string; content: string; amount: number }[],
+  opts?: { withSubCategory?: boolean }
 ) {
-  ["날짜", "분류", "내용", "금액"].forEach((label, i) => {
+  const labels = opts?.withSubCategory
+    ? ["날짜", "분류", "세부분류", "내용", "금액"]
+    : ["날짜", "분류", "내용", "금액"];
+  labels.forEach((label, i) => {
     const cell = sheet.getCell(headerRow, startCol + i);
     cell.value = label;
     styleDailyColumnHeader(cell);
   });
+  const contentCol = opts?.withSubCategory ? startCol + 3 : startCol + 2;
+  const amountCol = opts?.withSubCategory ? startCol + 4 : startCol + 3;
   rows.forEach((row, i) => {
     const r = headerRow + 1 + i;
-    sheet.getCell(r, startCol).value = row.date;
+    const dateCell = sheet.getCell(r, startCol);
+    dateCell.value = toExcelDate(row.date);
+    dateCell.numFmt = "yyyy-mm-dd";
     sheet.getCell(r, startCol + 1).value = row.category;
-    sheet.getCell(r, startCol + 2).value = row.content;
-    const amountCell = sheet.getCell(r, startCol + 3);
+    if (opts?.withSubCategory) sheet.getCell(r, startCol + 2).value = row.subCategory ?? "";
+    sheet.getCell(r, contentCol).value = row.content;
+    const amountCell = sheet.getCell(r, amountCol);
     amountCell.value = row.amount;
     amountCell.numFmt = DAILY_MONEY_FMT;
     amountCell.alignment = { horizontal: "right" };
@@ -145,16 +230,20 @@ function writeDailySheet(
   m: MonthTarget,
   transactions: TransactionWithCategory[],
   incomeCategories: Category[],
-  expenseCategories: Category[]
+  expenseCategories: Category[],
+  variableBudgetItems: { category_id: string; memo: string | null }[]
 ) {
   sheet.columns = [
     { width: 11.9 }, { width: 8.4 }, { width: 13.6 }, { width: 10.5 }, { width: 3 },
-    { width: 17 }, { width: 11 }, { width: 21.1 }, { width: 10.5 }, { width: 3 },
+    { width: 17 }, { width: 11 }, { width: 13 }, { width: 21.1 }, { width: 10.5 }, { width: 3 },
     { width: 13 }, { width: 8.4 }, { width: 14.1 }, { width: 12.6 }, { width: 3 },
-    { width: 13.75 }, { width: 13.6 }, { width: 15.9 }, { width: 13.75 },
+    { width: 13.75 }, { width: 13.6 }, { width: 15.9 }, { width: 13.75 }, { width: 3 },
+    { width: 13.75 }, { width: 15.9 },
   ];
+  sheet.getColumn(24).hidden = true;
+  sheet.getColumn(25).hidden = true;
 
-  sheet.mergeCells(1, 1, 2, 14);
+  sheet.mergeCells(1, 1, 2, 15);
   const title = sheet.getCell(1, 1);
   title.value = `${m.year}년 ${m.month + 1}월`;
   styleDailySectionHeader(title, DAILY_COLOR.title);
@@ -186,12 +275,12 @@ function writeDailySheet(
   sheet.mergeCells(sectionRow, 1, sectionRow, 4);
   styleDailySectionHeader(sheet.getCell(sectionRow, 1), DAILY_COLOR.income);
   sheet.getCell(sectionRow, 1).value = "수입";
-  sheet.mergeCells(sectionRow, 6, sectionRow, 9);
+  sheet.mergeCells(sectionRow, 6, sectionRow, 10);
   styleDailySectionHeader(sheet.getCell(sectionRow, 6), DAILY_COLOR.expense);
   sheet.getCell(sectionRow, 6).value = "지출";
-  sheet.mergeCells(sectionRow, 11, sectionRow, 14);
-  styleDailySectionHeader(sheet.getCell(sectionRow, 11), DAILY_COLOR.savings);
-  sheet.getCell(sectionRow, 11).value = "저축 및 투자";
+  sheet.mergeCells(sectionRow, 12, sectionRow, 15);
+  styleDailySectionHeader(sheet.getCell(sectionRow, 12), DAILY_COLOR.savings);
+  sheet.getCell(sectionRow, 12).value = "저축 및 투자";
   r++;
 
   const totalRow = r;
@@ -200,16 +289,30 @@ function writeDailySheet(
   sheet.getCell(totalRow, 2).value = income;
   sheet.getCell(totalRow, 2).numFmt = DAILY_MONEY_FMT;
   sheet.getCell(totalRow, 6).value = "전체 지출";
-  sheet.mergeCells(totalRow, 7, totalRow, 9);
+  sheet.mergeCells(totalRow, 7, totalRow, 10);
   sheet.getCell(totalRow, 7).value = expense;
   sheet.getCell(totalRow, 7).numFmt = DAILY_MONEY_FMT;
-  sheet.getCell(totalRow, 11).value = "저축 및 투자";
-  sheet.mergeCells(totalRow, 12, totalRow, 14);
-  sheet.getCell(totalRow, 12).value = savings;
-  sheet.getCell(totalRow, 12).numFmt = DAILY_MONEY_FMT;
+  sheet.getCell(totalRow, 12).value = "저축 및 투자";
+  sheet.mergeCells(totalRow, 13, totalRow, 15);
+  sheet.getCell(totalRow, 13).value = savings;
+  sheet.getCell(totalRow, 13).numFmt = DAILY_MONEY_FMT;
   r++;
 
   const headerRow = r;
+  // 거래 memo(예: "제주도 · 기차표 예매")를 세부분류/내용 칸으로 분리. 매칭되는 변동지출계획 항목이 없으면 세부분류는 비우고 memo 전체를 내용에 표시.
+  function splitExpenseMemo(t: TransactionWithCategory): { subCategory?: string; content: string } {
+    const matchedItem = t.memo
+      ? variableBudgetItems.find(
+          (item) => item.category_id === t.category?.id && matchesSubCategory(t.memo, item.memo)
+        )
+      : undefined;
+    if (matchedItem?.memo) {
+      const split = splitSubCategoryMemo(t.memo, matchedItem.memo);
+      // content를 카테고리명 등으로 채우면 재업로드 시 "세부분류 · 카테고리명"으로 잘못 합쳐지므로, 실제 남는 내용이 없으면 빈 칸으로 둔다.
+      if (split.subCategory) return { subCategory: split.subCategory, content: split.content };
+    }
+    return { content: t.memo || t.category?.name || "지출" };
+  }
   const incomeTx = [...transactions]
     .filter((t) => t.type === "income")
     .sort((a, b) => a.date.localeCompare(b.date) || a.created_at.localeCompare(b.created_at))
@@ -217,13 +320,16 @@ function writeDailySheet(
   const expenseTx = [...transactions]
     .filter((t) => t.type === "expense")
     .sort((a, b) => a.date.localeCompare(b.date) || a.created_at.localeCompare(b.created_at))
-    .map((t) => ({ date: t.date, category: t.category?.name ?? "미분류", content: t.memo || t.category?.name || "지출", amount: t.amount }));
+    .map((t) => {
+      const { subCategory, content } = splitExpenseMemo(t);
+      return { date: t.date, category: t.category?.name ?? "미분류", subCategory, content, amount: t.amount };
+    });
 
   writeDailyTxTable(sheet, headerRow, 1, incomeTx);
-  writeDailyTxTable(sheet, headerRow, 6, expenseTx);
+  writeDailyTxTable(sheet, headerRow, 6, expenseTx, { withSubCategory: true });
   // 저축 및 투자: 데이터 모델이 아직 없어 헤더만 표시
   ["날짜", "분류", "내용", "금액"].forEach((label, i) => {
-    const cell = sheet.getCell(headerRow, 11 + i);
+    const cell = sheet.getCell(headerRow, 12 + i);
     cell.value = label;
     styleDailyColumnHeader(cell);
   });
@@ -234,8 +340,8 @@ function writeDailySheet(
     const total = transactions
       .filter((t) => t.type === "income" && t.category?.id === category.id)
       .reduce((sum, t) => sum + t.amount, 0);
-    sheet.getCell(rowIdx, 16).value = category.name;
-    const cell = sheet.getCell(rowIdx, 17);
+    sheet.getCell(rowIdx, 17).value = category.name;
+    const cell = sheet.getCell(rowIdx, 18);
     cell.value = total;
     cell.numFmt = DAILY_MONEY_FMT;
   });
@@ -244,11 +350,57 @@ function writeDailySheet(
     const total = transactions
       .filter((t) => t.type === "expense" && t.category?.id === category.id)
       .reduce((sum, t) => sum + t.amount, 0);
-    sheet.getCell(rowIdx, 18).value = category.name;
-    const cell = sheet.getCell(rowIdx, 19);
+    sheet.getCell(rowIdx, 19).value = category.name;
+    const cell = sheet.getCell(rowIdx, 20);
     cell.value = total;
     cell.numFmt = DAILY_MONEY_FMT;
   });
+
+  // 우측(V/W): 분류별 세부분류 참고 목록 — 분류 칸을 행마다 반복 표시, 그 분류에 등록된 세부분류가 없으면 생략
+  // 동시에 X/Y(숨김 열)에 "분류명 → 그 분류의 W열 범위주소" 매핑을 만들어 세부분류 종속 드롭다운의 조회표로 사용
+  // (세부분류가 없는 분류도 빈 칸 하나짜리 범위로 매핑해둬야 VLOOKUP이 항상 매칭돼서 드롭다운이 정상 동작함)
+  const fallbackCell = `$${colLetter(24)}$1`; // 항상 빈 칸(제목 병합 범위 밖)
+  let subListRow = headerRow;
+  let helperRow = headerRow;
+  for (const category of expenseCategories) {
+    const memos = Array.from(
+      new Set(
+        variableBudgetItems
+          .filter((item) => item.category_id === category.id)
+          .map((item) => item.memo)
+          .filter((memo): memo is string => !!memo)
+      )
+    );
+
+    let rangeAddr = fallbackCell;
+    if (memos.length > 0) {
+      const firstRow = subListRow;
+      for (const memo of memos) {
+        sheet.getCell(subListRow, 22).value = category.name;
+        sheet.getCell(subListRow, 23).value = memo;
+        subListRow++;
+      }
+      rangeAddr = `$${colLetter(23)}$${firstRow}:$${colLetter(23)}$${subListRow - 1}`;
+    }
+
+    sheet.getCell(helperRow, 24).value = category.name;
+    sheet.getCell(helperRow, 25).value = rangeAddr;
+    helperRow++;
+  }
+  const helperTableRange = `$${colLetter(24)}$${headerRow}:$${colLetter(25)}$${helperRow - 1}`;
+
+  // 데이터 유효성 검사: 분류 입력 칸엔 고정 목록, 세부분류 입력 칸엔 그 행의 분류에 종속된 목록을 드롭다운으로 연결
+  // (새 값 직접 입력도 허용 — 경고만 표시, 업로드 시 새 분류는 자동 생성되는 기존 동작과 맞춤)
+  const VALIDATION_BUFFER_ROWS = 30;
+  const incomeRows = Math.max(incomeTx.length, VALIDATION_BUFFER_ROWS);
+  const expenseRows = Math.max(expenseTx.length, VALIDATION_BUFFER_ROWS);
+  if (incomeCategories.length > 0) {
+    applyListValidation(sheet, 2, headerRow + 1, headerRow + incomeRows, 17, headerRow, headerRow + incomeCategories.length - 1);
+  }
+  if (expenseCategories.length > 0) {
+    applyListValidation(sheet, 7, headerRow + 1, headerRow + expenseRows, 19, headerRow, headerRow + expenseCategories.length - 1);
+    applyDependentListValidation(sheet, 8, headerRow + 1, headerRow + expenseRows, 7, helperTableRange);
+  }
 
   sheet.views = [{ state: "frozen", ySplit: headerRow }];
 }
@@ -829,7 +981,14 @@ export async function exportSettlementExcel(months: MonthTarget[], types: Settle
 
     if (types.daily) {
       const sheet = workbook.addWorksheet(sheetTitle(m, multiYear, "일일정산"));
-      writeDailySheet(sheet, m, transactions, exportData.incomeCategories, exportData.expenseCategories);
+      writeDailySheet(
+        sheet,
+        m,
+        transactions,
+        exportData.incomeCategories,
+        exportData.expenseCategories,
+        monthData.variableBudgetItems
+      );
     }
     if (types.weekly) {
       const sheet = workbook.addWorksheet(sheetTitle(m, multiYear, "주간정산"));

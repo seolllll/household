@@ -6,6 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { ReviewInputCell } from "@/components/review-input-cell";
 import { formatCurrency } from "@/lib/format";
 import { FIXED_EXPENSE_OTHER_LABEL } from "@/lib/budget-rows";
+import { matchesSubCategory } from "@/lib/sub-category-memo";
 import {
   updateVariableBudgetItemReview,
   upsertBudget,
@@ -31,7 +32,7 @@ export function actualForItem(item: VariableBudgetItemWithCategory, transactions
       (t) =>
         t.type === "expense" &&
         t.category?.id === item.category_id &&
-        (t.memo ?? "") === (item.memo ?? "")
+        matchesSubCategory(t.memo, item.memo)
     )
     .reduce((sum, t) => sum + t.amount, 0);
 }

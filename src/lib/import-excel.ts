@@ -1,5 +1,6 @@
 import * as XLSX from "xlsx";
 import { toDateKey } from "@/lib/date-range";
+import { joinSubCategoryMemo } from "@/lib/sub-category-memo";
 import type { TransactionType } from "@/types/database";
 
 export interface ParsedImportItem {
@@ -42,10 +43,11 @@ const COL = {
   incomeAmount: 3, // D
   expenseDate: 5, // F
   expenseCategory: 6, // G
-  expenseMemo: 7, // H
-  expenseAmount: 8, // I
-  incomeCategoryList: 15, // P: 이번 달 수입 분류명 목록(합계 0 포함, Q열 합계는 무시)
-  expenseCategoryList: 17, // R: 이번 달 지출 분류명 목록(합계 0 포함, S열 합계는 무시)
+  expenseSubcategory: 7, // H: 채워져 있으면 add-modal에서 세부분류 칩을 선택한 것과 동일하게 memo로 사용(내용열보다 우선)
+  expenseMemo: 8, // I
+  expenseAmount: 9, // J
+  incomeCategoryList: 16, // Q: 이번 달 수입 분류명 목록(합계 0 포함, R열 합계는 무시)
+  expenseCategoryList: 18, // S: 이번 달 지출 분류명 목록(합계 0 포함, T열 합계는 무시)
 } as const;
 
 function findHeaderRowIndex(rows: unknown[][]): number {
@@ -58,8 +60,11 @@ function findHeaderRowIndex(rows: unknown[][]): number {
 
 /**
  * 일일정산 엑셀 업로드 양식: "월간 리포트" 형식.
- * - 거래 데이터: A~D = 수입(날짜/분류/내용/금액), F~I = 지출(날짜/분류/내용/금액). 날짜 열이 "날짜"인 행 다음부터 데이터 시작.
- * - 분류명 목록: P = 수입 분류 전체, R = 지출 분류 전체 (헤더 행부터 바로 시작, 그 달 거래가 없어 금액이 0인 분류도 포함됨). Q/S열의 합계 숫자는 사용하지 않음.
+ * - 거래 데이터: A~D = 수입(날짜/분류/내용/금액), F~J = 지출(날짜/분류/세부분류/내용/금액). 날짜 열이 "날짜"인 행 다음부터 데이터 시작.
+ * - 지출의 세부분류(H열)가 채워져 있으면 add-modal에서 그 세부분류 칩을 선택한 것과 동일하게 매칭되도록 memo를
+ *   "세부분류 · 내용"(joinSubCategoryMemo) 형태로 저장. 내용열(I)이 비어있으면 세부분류만. 세부분류가 비어있으면
+ *   내용열만 그대로 memo로 사용(기존 자유 입력 방식).
+ * - 분류명 목록: Q = 수입 분류 전체, S = 지출 분류 전체 (헤더 행부터 바로 시작, 그 달 거래가 없어 금액이 0인 분류도 포함됨). R/T열의 합계 숫자는 사용하지 않음.
  * - 양식이 바뀌면 이 파일의 COL 매핑만 수정하면 됨.
  */
 export async function parseImportFile(file: File): Promise<ParsedImport> {
@@ -98,12 +103,14 @@ export async function parseImportFile(file: File): Promise<ParsedImport> {
     const expAmount = toAmount(row[COL.expenseAmount]);
     const expCategory = toText(row[COL.expenseCategory]);
     if (expDate && expAmount && expCategory) {
+      const subCategory = toText(row[COL.expenseSubcategory]);
+      const content = toText(row[COL.expenseMemo]);
       items.push({
         type: "expense",
         date: expDate,
         categoryName: expCategory,
         amount: expAmount,
-        memo: toText(row[COL.expenseMemo]) || null,
+        memo: subCategory ? joinSubCategoryMemo(subCategory, content) : content || null,
       });
     }
   }
